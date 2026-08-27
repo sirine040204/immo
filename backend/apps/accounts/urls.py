@@ -1,5 +1,12 @@
-# apps/accounts/urls.py
-
 from django.urls import path
 
-urlpatterns = []
+from .views import CompanyAdminRegistrationView
+
+
+urlpatterns = [
+    path(
+        "register/",
+        CompanyAdminRegistrationView.as_view(),
+        name="company-admin-register",
+    ),
+]
