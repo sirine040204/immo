@@ -1,6 +1,9 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from .models import Entreprise
+from .serializers import CompanyApprovalSerializer
 
 from .serializers import (
     CompanyAdminRegistrationSerializer,
@@ -52,4 +55,46 @@ class LoginView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+#POST /api/v1/accounts/companies/<int:company_id>/approve/
+class CompanyApprovalView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, company_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "detail": "Seul le Super Admin peut approuver une entreprise."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            company = Entreprise.objects.get(
+                id_entreprise=company_id,
+                statut=Entreprise.Statut.EN_ATTENTE,
+            )
+        except Entreprise.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Entreprise introuvable ou déjà traitée."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CompanyApprovalSerializer(
+            context={"company": company}
+        )
+
+        serializer.save()
+
+        return Response(
+            {
+                "message": "L'entreprise a été approuvée.",
+                "company_id": company.id_entreprise,
+            },
+            status=status.HTTP_200_OK,
         )

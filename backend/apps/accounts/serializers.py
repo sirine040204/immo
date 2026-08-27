@@ -1,4 +1,3 @@
-from django.db.models.fields import related_descriptors
 from django.db import transaction
 from rest_framework import serializers
 from django.contrib.auth import authenticate
@@ -129,5 +128,28 @@ class LoginSerializer(serializers.Serializer):
         attrs["access"] = str(refresh.access_token)
 
         return attrs
+
+#CompanyApprovalSerializer
+class CompanyApprovalSerializer(serializers.Serializer):
+
+    def save(self, **kwargs):
+        company = self.context["company"]
+
+        with transaction.atomic():
+
+            company.statut = Entreprise.Statut.ACTIVE
+            company.save(update_fields=["statut"])
+
+            company_admins = User.objects.filter(
+                entreprise=company,
+                is_company_admin=True,
+            )
+
+            company_admins.update(
+                statut=User.Statut.ACTIVE,
+                is_approved=True,
+            )
+
+        return company
 
     
