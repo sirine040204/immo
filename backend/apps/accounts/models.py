@@ -99,13 +99,14 @@ class RolePermission(models.Model):
         Role,
         on_delete=models.CASCADE,
         db_column="role_id",
+        related_name="role_permissions",
     )
 
     permission = models.ForeignKey(
         Permission,
         on_delete=models.CASCADE,
         db_column="permission_id",
-        related_name="role_permissions",#also One optional polish, how about we Add related_name to RolePermission's FKs so you can later do some_role.role_permissions.all() instead of Django's default clunky some_role.rolepermission_set.all()
+        related_name="role_permissions",
     )
 
     class Meta:
