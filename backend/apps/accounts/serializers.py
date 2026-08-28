@@ -2,7 +2,7 @@ from django.db import transaction
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Entreprise, User
+from .models import Entreprise, User, Role
 
 #CompanyAdminRegistrationSerializer
 class CompanyAdminRegistrationSerializer(serializers.Serializer):
@@ -152,4 +152,43 @@ class CompanyApprovalSerializer(serializers.Serializer):
 
         return company
 
+#EmployeeInvitationSerializer
+class EmployeeInvitationSerializer(serializers.Serializer):
+
+    nom = serializers.CharField(max_length=100)
+    prenom = serializers.CharField(max_length=100)
+    email = serializers.EmailField()
+    role = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.filter(
+            statut=Role.Statut.ACTIF
+        )
+    )
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                "Cette adresse email est déjà utilisée."
+            )
+
+        return value
+
+    def create(self, validated_data):
+        company_admin = self.context["request"].user
+
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=None,
+            nom=validated_data["nom"],
+            prenom=validated_data["prenom"],
+            entreprise=company_admin.entreprise,
+            role=validated_data["role"],
+            is_company_admin=False,
+            is_approved=True,
+            statut=User.Statut.EN_ATTENTE,
+        )
+
+        user.set_unusable_password()
+        user.save()
+
+        return user
     

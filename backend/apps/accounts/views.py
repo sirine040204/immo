@@ -8,6 +8,7 @@ from .serializers import CompanyApprovalSerializer
 from .serializers import (
     CompanyAdminRegistrationSerializer,
     LoginSerializer,
+    EmployeeInvitationSerializer,
 )
 
 #POST /api/v1/accounts/register/
@@ -57,7 +58,7 @@ class LoginView(APIView):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-#POST /api/v1/accounts/companies/<int:company_id>/approve/
+#POST /api/v1/accounts/companies/<actual_id>/approve/
 class CompanyApprovalView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -97,4 +98,36 @@ class CompanyApprovalView(APIView):
                 "company_id": company.id_entreprise,
             },
             status=status.HTTP_200_OK,
+        )
+
+#POST /api/v1/accounts/employees/invite/
+class EmployeeInvitationView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        print("AUTH USER =", request.user)
+        print("USER ID =", request.user.id_utilisateur)
+        print("IS COMPANY ADMIN =", request.user.is_company_admin)
+        print("ENTREPRISE ID =", request.user.entreprise_id)
+
+
+        serializer = EmployeeInvitationSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response(
+                {
+                    "message": "L'employé a été créé avec succès.",
+                    "user_id": user.id_utilisateur,
+                },
+                status=status.HTTP_201_CREATED, 
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
         )

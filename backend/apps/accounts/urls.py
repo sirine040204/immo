@@ -4,8 +4,8 @@ from .views import (
     CompanyAdminRegistrationView,
     LoginView,
     CompanyApprovalView,
+    EmployeeInvitationView,
 )
-
 
 urlpatterns = [
     path(
@@ -23,5 +23,11 @@ urlpatterns = [
         "companies/<int:company_id>/approve/",
         CompanyApprovalView.as_view(),
         name="company-approve",
+    ),
+
+    path(
+    "employees/invite/",
+    EmployeeInvitationView.as_view(),
+    name="employee-invite",
     ),
 ]
