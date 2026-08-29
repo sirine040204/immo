@@ -163,11 +163,21 @@ class EmployeeInvitationSerializer(serializers.Serializer):
     nom = serializers.CharField(max_length=100)
     prenom = serializers.CharField(max_length=100)
     email = serializers.EmailField()
+
     role = serializers.PrimaryKeyRelatedField(
-        queryset=Role.objects.filter(
-            statut=Role.Statut.ACTIF
-        )
+        queryset=Role.objects.none()
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            self.fields["role"].queryset = Role.objects.filter(
+                entreprise=request.user.entreprise,
+                statut=Role.Statut.ACTIF,
+            )
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():

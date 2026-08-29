@@ -61,6 +61,13 @@ class Role(models.Model):
         ARCHIVE = "ARCHIVE", "Archivé"
 
     id = models.BigAutoField(primary_key=True)
+
+    entreprise = models.ForeignKey(
+        Entreprise,
+        on_delete=models.CASCADE,
+        related_name="roles",
+    )
+
     nom = models.CharField(max_length=100)
     description = models.TextField(blank=True)
 
