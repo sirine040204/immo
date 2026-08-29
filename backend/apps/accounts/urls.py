@@ -5,6 +5,7 @@ from .views import (
     LoginView,
     CompanyApprovalView,
     EmployeeInvitationView,
+    EmployeeActivationView,
 )
 
 urlpatterns = [
@@ -30,4 +31,9 @@ urlpatterns = [
     EmployeeInvitationView.as_view(),
     name="employee-invite",
     ),
+    path(
+    "employees/activate/",
+    EmployeeActivationView.as_view(),
+    name="employee-activate",
+),
 ]

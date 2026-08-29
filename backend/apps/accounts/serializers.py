@@ -1,8 +1,12 @@
+import uuid
+from datetime import timedelta
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Entreprise, User, Role
+from .models import Entreprise, User, Role, EmployeeActivation
 
 #CompanyAdminRegistrationSerializer
 class CompanyAdminRegistrationSerializer(serializers.Serializer):
@@ -189,6 +193,68 @@ class EmployeeInvitationSerializer(serializers.Serializer):
 
         user.set_unusable_password()
         user.save()
+
+        activation = EmployeeActivation.objects.create(
+            user=user,
+            token=uuid.uuid4(),
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+
+        return user
+
+# EmployeeActivationSerializer
+class EmployeeActivationSerializer(serializers.Serializer):
+
+    token = serializers.UUIDField()
+    mot_de_passe = serializers.CharField(
+        write_only=True,
+        min_length=8,
+    )
+
+    def validate(self, attrs):
+        token = attrs["token"]
+
+        try:
+            activation = EmployeeActivation.objects.select_related(
+                "user"
+            ).get(
+                token=token,
+                used=False,
+            )
+        except EmployeeActivation.DoesNotExist:
+            raise serializers.ValidationError(
+                "Le lien d'activation est invalide ou a déjà été utilisé."
+            )
+
+        if timezone.now() > activation.expires_at:
+            raise serializers.ValidationError(
+                "Le lien d'activation a expiré."
+            )
+
+        attrs["activation"] = activation
+
+        return attrs
+
+    @transaction.atomic
+    def save(self, **kwargs):
+        activation = self.validated_data["activation"]
+        password = self.validated_data["mot_de_passe"]
+
+        user = activation.user
+
+        user.set_password(password)
+        user.statut = User.Statut.ACTIVE
+        user.is_active = True
+        user.save(
+            update_fields=[
+                "password",
+                "statut",
+                "is_active",
+            ]
+        )
+
+        activation.used = True
+        activation.save(update_fields=["used"])
 
         return user
     

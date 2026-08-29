@@ -231,3 +231,26 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+class EmployeeActivation(models.Model):
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="activation",
+    )
+
+    token = models.UUIDField(
+        unique=True,
+        editable=False,
+    )
+
+    expires_at = models.DateTimeField()
+
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "employee_activation"
+
+    def __str__(self):
+        return f"Activation - {self.user.email}"

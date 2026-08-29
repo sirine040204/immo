@@ -9,6 +9,7 @@ from .serializers import (
     CompanyAdminRegistrationSerializer,
     LoginSerializer,
     EmployeeInvitationSerializer,
+    EmployeeActivationSerializer,
 )
 
 #POST /api/v1/accounts/register/
@@ -125,6 +126,31 @@ class EmployeeInvitationView(APIView):
                     "user_id": user.id_utilisateur,
                 },
                 status=status.HTTP_201_CREATED, 
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+# POST /api/v1/accounts/employees/activate/
+class EmployeeActivationView(APIView):
+
+    def post(self, request):
+
+        serializer = EmployeeActivationSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+            user = serializer.save()
+
+            return Response(
+                {
+                    "message": "Votre compte a été activé avec succès.",
+                    "user_id": user.id_utilisateur,
+                },
+                status=status.HTTP_200_OK,
             )
 
         return Response(
