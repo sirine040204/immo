@@ -1,8 +1,9 @@
 from rest_framework import status
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .models import Entreprise
+from .models import Entreprise, EmployeeActivation
 from .serializers import CompanyApprovalSerializer
 
 from .serializers import (
@@ -136,6 +137,56 @@ class EmployeeInvitationView(APIView):
 # POST /api/v1/accounts/employees/activate/
 class EmployeeActivationView(APIView):
 
+    #GET /api/v1/accounts/employees/activate/?token=<token>
+    def get(self, request):
+
+        token = request.query_params.get("token")
+
+        if not token:
+            return Response(
+                {
+                    "detail": "Token d'activation manquant."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            activation = EmployeeActivation.objects.select_related(
+                "user"
+            ).get(token=token)
+        except EmployeeActivation.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Token d'activation invalide."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if activation.used:
+            return Response(
+                {
+                    "detail": "Ce lien d'activation a déjà été utilisé."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if activation.expires_at < timezone.now():
+            return Response(
+                {
+                    "detail": "Ce lien d'activation a expiré."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "message": "Lien d'activation valide.",
+                "email": activation.user.email,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+    #POST /api/v1/accounts/employees/activate/ (without token)
     def post(self, request):
 
         serializer = EmployeeActivationSerializer(

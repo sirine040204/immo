@@ -145,8 +145,13 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+#MAILERS = {
+    #'default': {
+        #'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+    #},
+#}
+
+# EMAIL CONFIGURATION FOR DEVELOPMENT
+#This means Django won't try to contact Gmail, Outlook, etc.
+# Instead it prints emails in your terminal.
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

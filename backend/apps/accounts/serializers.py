@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
+from django.core.mail import send_mail
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -198,6 +199,24 @@ class EmployeeInvitationSerializer(serializers.Serializer):
             user=user,
             token=uuid.uuid4(),
             expires_at=timezone.now() + timedelta(days=7),
+        )
+
+        activation_link = (
+            "http://127.0.0.1:8000/api/v1/accounts/employees/activate/"
+            f"?token={activation.token}"
+        )
+
+        send_mail(
+            subject="Activation de votre compte",
+            message=(
+                f"Bonjour {user.prenom},\n\n"
+                "Vous avez été invité à rejoindre votre entreprise.\n\n"
+                "Cliquez sur le lien suivant pour activer votre compte :\n"
+                f"{activation_link}\n\n"
+                "Ce lien est valable pendant 7 jours."
+            ),
+            from_email=None,
+            recipient_list=[user.email],
         )
 
         return user
