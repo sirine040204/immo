@@ -2,8 +2,9 @@ from rest_framework import status
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .permissions import HasPermission
 from rest_framework.permissions import IsAuthenticated
-from .models import Entreprise, EmployeeActivation
+from .models import Entreprise, EmployeeActivation, Role, Permission, RolePermission, User 
 from .serializers import CompanyApprovalSerializer
 
 from .serializers import (
@@ -11,6 +12,9 @@ from .serializers import (
     LoginSerializer,
     EmployeeInvitationSerializer,
     EmployeeActivationSerializer,
+    RoleSerializer,
+    RolePermissionSerializer,
+    EmployeeListSerializer,
 )
 
 #POST /api/v1/accounts/register/
@@ -207,4 +211,117 @@ class EmployeeActivationView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+#POST /api/v1/accounts/roles/<role_id>/permissions/
+class RolePermissionCreateView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, role_id):
+
+        # 1. Vérifier que l'utilisateur possède le droit
+        #    de modifier les permissions des rôles.
+        if not request.user.is_company_admin:
+            return Response(
+                {
+                    "detail": "Seul le Company Admin peut gérer les permissions des rôles."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 2. Le rôle doit appartenir à l'entreprise de l'utilisateur.
+        try:
+            role = Role.objects.get(
+                id=role_id,
+                entreprise=request.user.entreprise,
+                statut=Role.Statut.ACTIF,
+            )
+        except Role.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 3. Vérifier que le permission ID existe.
+        permission_id = request.data.get("permission")
+
+        if not permission_id:
+            return Response(
+                {
+                    "permission": [
+                        "Ce champ est obligatoire."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            permission = Permission.objects.get(
+                id=permission_id
+            )
+        except Permission.DoesNotExist:
+            return Response(
+                {
+                    "permission": [
+                        "Cette permission n'existe pas."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 4. Éviter les doublons.
+        if RolePermission.objects.filter(
+            role=role,
+            permission=permission,
+        ).exists():
+            return Response(
+                {
+                    "detail": "Cette permission est déjà attribuée à ce rôle."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 5. Créer l'association.
+        role_permission = RolePermission.objects.create(
+            role=role,
+            permission=permission,
+        )
+
+        serializer = RolePermissionSerializer(
+            role_permission
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
+
+#GET /api/v1/accounts/employees/
+class EmployeeListView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "EMPLOYE_CONSULTER"
+
+    def get(self, request):
+
+        employees = User.objects.filter(
+            entreprise=request.user.entreprise,
+            is_company_admin=False,
+        ).select_related("role").order_by("nom", "prenom")
+
+        serializer = EmployeeListSerializer(
+            employees,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
         )

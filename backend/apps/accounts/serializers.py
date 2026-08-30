@@ -7,8 +7,15 @@ from django.core.mail import send_mail
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Entreprise, User, Role, EmployeeActivation
 
+from .models import (
+    Entreprise,
+    User,
+    Role,
+    EmployeeActivation,
+    Permission,
+    RolePermission,
+)
 #CompanyAdminRegistrationSerializer
 class CompanyAdminRegistrationSerializer(serializers.Serializer):
     # User information
@@ -286,4 +293,73 @@ class EmployeeActivationSerializer(serializers.Serializer):
         activation.save(update_fields=["used"])
 
         return user
+
+#RoleSerializer
+class RoleSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Role
+        fields = [
+            "id",
+            "nom",
+            "description",
+            "statut",
+            "date_creation",
+        ]
+        read_only_fields = [
+            "id",
+            "statut",
+            "date_creation",
+        ]
+
+#RolePermissionSerializer
+class RolePermissionSerializer(serializers.ModelSerializer):
+
+    permission_code = serializers.CharField(
+        source="permission.code",
+        read_only=True,
+    )
+
+    permission_nom = serializers.CharField(
+        source="permission.nom",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RolePermission
+        fields = [
+            "id",
+            "permission",
+            "permission_code",
+            "permission_nom",
+        ]
+        read_only_fields = [
+            "id",
+            "permission_code",
+            "permission_nom",
+        ]
+
+#EmployeeListSerializer
+class EmployeeListSerializer(serializers.ModelSerializer):
+
+    role_nom = serializers.CharField(
+        source="role.nom",
+        read_only=True,
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            "id_utilisateur",
+            "nom",
+            "prenom",
+            "email",
+            "telephone",
+            "role",
+            "role_nom",
+            "statut",
+            "date_creation",
+            "derniere_connexion",
+        ]
+        read_only_fields = fields
     
