@@ -8,6 +8,8 @@ from .views import (
     EmployeeActivationView,
     RolePermissionCreateView,
     EmployeeListView,
+    RoleListCreateView,
+    RoleDetailView,
 )
 
 urlpatterns = [
@@ -48,4 +50,15 @@ urlpatterns = [
         EmployeeListView.as_view(),
         name="employee-list",
 ),
+    path(
+        "roles/",
+        RoleListCreateView.as_view(),
+        name="role-list-create",
+    ),
+    path(
+        "roles/<int:role_id>/",
+        RoleDetailView.as_view(),
+        name="role-detail",
+    ),
+    
 ]

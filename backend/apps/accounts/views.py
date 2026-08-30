@@ -16,7 +16,7 @@ from .serializers import (
     RolePermissionSerializer,
     EmployeeListSerializer,
 )
-
+#register
 #POST /api/v1/accounts/register/
 class CompanyAdminRegistrationView(APIView):
 
@@ -40,6 +40,7 @@ class CompanyAdminRegistrationView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
+#login
 #POST /api/v1/accounts/login/
 class LoginView(APIView):
 
@@ -63,7 +64,7 @@ class LoginView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
-
+#superadmin approves company
 #POST /api/v1/accounts/companies/<actual_id>/approve/
 class CompanyApprovalView(APIView):
 
@@ -105,7 +106,7 @@ class CompanyApprovalView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
+#company admin invites employee
 #POST /api/v1/accounts/employees/invite/
 class EmployeeInvitationView(APIView):
 
@@ -137,7 +138,7 @@ class EmployeeInvitationView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
-
+#employee activates his account
 # POST /api/v1/accounts/employees/activate/
 class EmployeeActivationView(APIView):
 
@@ -212,7 +213,7 @@ class EmployeeActivationView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
-
+#company admin create role permission for his company
 #POST /api/v1/accounts/roles/<role_id>/permissions/
 class RolePermissionCreateView(APIView):
 
@@ -298,7 +299,7 @@ class RolePermissionCreateView(APIView):
             serializer.data,
             status=status.HTTP_201_CREATED,
         )
-
+#company admin list his employees
 #GET /api/v1/accounts/employees/
 class EmployeeListView(APIView):
 
@@ -323,5 +324,202 @@ class EmployeeListView(APIView):
 
         return Response(
             serializer.data,
+            status=status.HTTP_200_OK,
+        )
+#company admin list and create roles for his company
+# GET /api/v1/accounts/roles/
+# POST /api/v1/accounts/roles/
+class RoleListCreateView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "ROLE_CONSULTER",
+        "POST": "ROLE_CREER",
+    }
+
+    def get(self, request):
+
+        roles = Role.objects.filter(
+            entreprise=request.user.entreprise,
+            statut=Role.Statut.ACTIF,
+        ).order_by("nom")
+
+        serializer = RoleSerializer(
+            roles,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+
+        serializer = RoleSerializer(
+            data=request.data
+        )
+
+        if serializer.is_valid():
+
+            role = serializer.save(
+                entreprise=request.user.entreprise
+            )
+
+            return Response(
+                RoleSerializer(role).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+#company admin get, update, delete roles for his company
+# GET /api/v1/accounts/roles/<role_id>/
+# PATCH /api/v1/accounts/roles/<role_id>/
+# DELETE /api/v1/accounts/roles/<role_id>/
+class RoleDetailView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "ROLE_CONSULTER",
+        "PATCH": "ROLE_MODIFIER",
+        "DELETE": "ROLE_ARCHIVER",
+    }
+
+    def get_role(self, request, role_id):
+
+        try:
+            return Role.objects.get(
+                id=role_id,
+                entreprise=request.user.entreprise,
+            )
+        except Role.DoesNotExist:
+            return None
+
+    def get(self, request, role_id):
+
+        role = self.get_role(
+            request,
+            role_id,
+        )
+
+        if role is None:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RoleSerializer(role)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, role_id):
+
+        role = self.get_role(
+            request,
+            role_id,
+        )
+
+        if role is None:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if role.statut == Role.Statut.ARCHIVE:
+            return Response(
+                {
+                    "detail": "Impossible de modifier un rôle archivé."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = RoleSerializer(
+            role,
+            data=request.data,
+            partial=True,
+        )
+
+        if serializer.is_valid():
+
+            role = serializer.save()
+
+            return Response(
+                RoleSerializer(role).data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def delete(self, request, role_id):
+
+        role = self.get_role(
+            request,
+            role_id,
+        )
+
+        if role is None:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if role.statut == Role.Statut.ARCHIVE:
+            return Response(
+                {
+                    "detail": "Ce rôle est déjà archivé."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        employees_using_role = User.objects.filter(
+            role=role,
+            is_company_admin=False,
+            is_active=True,
+        ).exists()
+
+        if employees_using_role:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible d'archiver ce rôle car "
+                        "il est encore attribué à un employé."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role.statut = Role.Statut.ARCHIVE
+        role.save(
+            update_fields=["statut"]
+        )
+
+        return Response(
+            {
+                "message": "Le rôle a été archivé avec succès.",
+                "role_id": role.id,
+            },
             status=status.HTTP_200_OK,
         )

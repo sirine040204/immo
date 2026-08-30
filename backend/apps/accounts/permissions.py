@@ -46,6 +46,11 @@ class HasPermission(BasePermission):
             self.required_permission,
         )
 
+        if isinstance(permission_code, dict):
+            permission_code = permission_code.get(
+                request.method
+            )
+
         if not permission_code:
             return False
 
