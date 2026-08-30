@@ -15,6 +15,7 @@ from .serializers import (
     RoleSerializer,
     RolePermissionSerializer,
     EmployeeListSerializer,
+    EmployeeUpdateSerializer,
 )
 #register
 #POST /api/v1/accounts/register/
@@ -434,6 +435,111 @@ class EmployeeListView(APIView):
         return Response(
             serializer.data,
             status=status.HTTP_200_OK,
+        )
+#company admin get an employee details
+#GET /api/v1/accounts/employees/<employee_id>/
+#company admin update an employee information
+# PATCH /api/v1/accounts/employees/<employee_id>/
+class EmployeeDetailView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "EMPLOYE_CONSULTER",
+        "PATCH": "EMPLOYE_MODIFIER",
+    }
+
+    def get(self, request, employee_id):
+
+        # 1. Récupérer uniquement un employé
+        #    appartenant à la même entreprise.
+        try:
+            employee = User.objects.select_related(
+                "role"
+            ).get(
+                id_utilisateur=employee_id,
+                entreprise=request.user.entreprise,
+                is_company_admin=False,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Employé introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2. Sérialiser l'employé.
+        serializer = EmployeeListSerializer(employee)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, employee_id):
+
+        # 1. Récupérer uniquement un employé
+        #    appartenant à la même entreprise.
+        try:
+            employee = User.objects.select_related(
+                "role"
+            ).get(
+                id_utilisateur=employee_id,
+                entreprise=request.user.entreprise,
+                is_company_admin=False,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Employé introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2. Un employé désactivé ne peut pas être modifié
+        #    par cette API administrative.
+        if employee.statut == User.Statut.DESACTIVE:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible de modifier "
+                        "un employé désactivé."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 3. Valider et appliquer les modifications.
+        serializer = EmployeeUpdateSerializer(
+            employee,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            employee = serializer.save()
+
+            # Recharger le rôle après modification
+            # pour avoir role_nom correctement.
+            employee = User.objects.select_related(
+                "role"
+            ).get(
+                id_utilisateur=employee.id_utilisateur
+            )
+
+            return Response(
+                EmployeeListSerializer(employee).data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
         )
 #company admin list and create roles for his company
 # GET /api/v1/accounts/roles/

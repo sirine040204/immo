@@ -362,4 +362,37 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             "derniere_connexion",
         ]
         read_only_fields = fields
+
+# EmployeeUpdateSerializer
+class EmployeeUpdateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = [
+            "nom",
+            "prenom",
+            "telephone",
+            "role",
+        ]
+
+    def validate_role(self, role):
+
+        request = self.context.get("request")
+
+        if request is None:
+            raise serializers.ValidationError(
+                "Contexte de requête manquant."
+            )
+
+        if role.entreprise_id != request.user.entreprise_id:
+            raise serializers.ValidationError(
+                "Le rôle doit appartenir à la même entreprise."
+            )
+
+        if role.statut != Role.Statut.ACTIF:
+            raise serializers.ValidationError(
+                "Le rôle doit être actif."
+            )
+
+        return role
     

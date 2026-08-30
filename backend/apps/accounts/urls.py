@@ -11,6 +11,7 @@ from .views import (
     EmployeeListView,
     RoleListCreateView,
     RoleDetailView,
+    EmployeeDetailView,
 )
 
 urlpatterns = [
@@ -66,5 +67,10 @@ urlpatterns = [
         RoleDetailView.as_view(),
         name="role-detail",
     ),
+    path(
+    "employees/<int:employee_id>/",
+    EmployeeDetailView.as_view(),
+    name="employee-detail",
+),
     
 ]

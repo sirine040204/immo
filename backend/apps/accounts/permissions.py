@@ -40,16 +40,18 @@ class HasPermission(BasePermission):
 
     def has_permission(self, request, view):
 
-        permission_code = getattr(
+        required_permission = getattr(
             view,
             "required_permission",
-            self.required_permission,
+            None,
         )
 
-        if isinstance(permission_code, dict):
-            permission_code = permission_code.get(
+        if isinstance(required_permission, dict):
+            permission_code = required_permission.get(
                 request.method
             )
+        else:
+            permission_code = required_permission
 
         if not permission_code:
             return False
