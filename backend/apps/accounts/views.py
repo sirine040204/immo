@@ -450,6 +450,7 @@ class EmployeeDetailView(APIView):
     required_permission = {
         "GET": "EMPLOYE_CONSULTER",
         "PATCH": "EMPLOYE_MODIFIER",
+        "DELETE": "EMPLOYE_ARCHIVER",
     }
 
     def get(self, request, employee_id):
@@ -541,6 +542,44 @@ class EmployeeDetailView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
+    def delete(self, request, employee_id):
+
+        # 1. Récupérer uniquement un employé
+        #    appartenant à la même entreprise.
+        try:
+            employee = User.objects.get(
+                id_utilisateur=employee_id,
+                entreprise=request.user.entreprise,
+                is_company_admin=False,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Employé introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2. Vérifier que l'employé est actuellement actif.
+        if employee.statut == User.Statut.DESACTIVE:
+            return Response(
+                {
+                    "detail": "Cet employé est déjà désactivé."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 3. Désactiver l'employé au lieu de le supprimer.
+        employee.statut = User.Statut.DESACTIVE
+        employee.save(update_fields=["statut"])
+
+        return Response(
+            {
+                "message": "L'employé a été archivé avec succès.",
+                "user_id": employee.id_utilisateur,
+            },
+            status=status.HTTP_200_OK,
+        )   
 #company admin list and create roles for his company
 # GET /api/v1/accounts/roles/
 # POST /api/v1/accounts/roles/
