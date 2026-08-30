@@ -2,7 +2,7 @@ from rest_framework import status
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .permissions import HasPermission
+from .permissions import HasPermission, user_has_permission
 from rest_framework.permissions import IsAuthenticated
 from .models import Entreprise, EmployeeActivation, Role, Permission, RolePermission, User 
 from .serializers import CompanyApprovalSerializer
@@ -215,9 +215,46 @@ class EmployeeActivationView(APIView):
         )
 #company admin create role permission for his company
 #POST /api/v1/accounts/roles/<role_id>/permissions/
+#company admin list permissions of a role
+#GET /api/v1/accounts/roles/<role_id>/permissions/
 class RolePermissionCreateView(APIView):
 
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, role_id):
+
+        # 1. Vérifier que le rôle appartient
+        #    à l'entreprise de l'utilisateur.
+        try:
+            role = Role.objects.get(
+                id=role_id,
+                entreprise=request.user.entreprise,
+            )
+        except Role.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2. Récupérer les permissions du rôle.
+        role_permissions = RolePermission.objects.filter(
+            role=role
+        ).select_related("permission").order_by(
+            "permission__code"
+        )
+
+        # 3. Sérialiser les associations.
+        serializer = RolePermissionSerializer(
+            role_permissions,
+            many=True,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, role_id):
 
@@ -298,6 +335,78 @@ class RolePermissionCreateView(APIView):
         return Response(
             serializer.data,
             status=status.HTTP_201_CREATED,
+        )
+#company admin remove permission from his role
+#DELETE /api/v1/accounts/roles/<role_id>/permissions/<permission_id>/
+class RolePermissionDeleteView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def delete(self, request, role_id, permission_id):
+
+        # 1. Vérifier que l'utilisateur peut gérer
+        #    les permissions des rôles.
+        if not user_has_permission(
+            request.user,
+            "ROLE_MODIFIER",
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Vous n'avez pas la permission "
+                        "de modifier les permissions des rôles."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 2. Vérifier que le rôle appartient
+        #    à l'entreprise de l'utilisateur.
+        try:
+            role = Role.objects.get(
+                id=role_id,
+                entreprise=request.user.entreprise,
+                statut=Role.Statut.ACTIF,
+            )
+        except Role.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Rôle introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 3. Vérifier que l'association existe.
+        try:
+            role_permission = RolePermission.objects.get(
+                role=role,
+                permission_id=permission_id,
+            )
+        except RolePermission.DoesNotExist:
+            return Response(
+                {
+                    "detail": (
+                        "Cette permission n'est pas "
+                        "attribuée à ce rôle."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 4. Supprimer uniquement l'association.
+        role_permission.delete()
+
+        return Response(
+            {
+                "message": (
+                    "La permission a été retirée du rôle avec succès."
+                ),
+                "role_id": role.id,
+                "permission_id": permission_id,
+            },
+            status=status.HTTP_200_OK,
         )
 #company admin list his employees
 #GET /api/v1/accounts/employees/
