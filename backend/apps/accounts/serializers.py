@@ -395,4 +395,36 @@ class EmployeeUpdateSerializer(serializers.ModelSerializer):
             )
 
         return role
+#CompanyProfileSerializer
+class CompanyProfileSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Entreprise
+        fields = [
+            "id_entreprise",
+            "nom_entreprise",
+            "numero_fiscal",
+            "forme_juridique",
+            "secteur_activite",
+            "email_notifications",
+            "numero_telephone",
+            "date_creation",
+            "description",
+            "documents_justificatifs",
+            "statut",
+            "logo",
+            "adresse",
+            "site_web",
+            "devise",
+            "langue",
+            "delai_rappel_maintenance_defaut",
+            "delai_rappel_document_defaut",
+        ]
+
+        read_only_fields = [
+            "id_entreprise",
+            "numero_fiscal",
+            "date_creation",
+            "statut",
+        ]
     

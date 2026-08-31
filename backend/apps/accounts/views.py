@@ -16,6 +16,7 @@ from .serializers import (
     RolePermissionSerializer,
     EmployeeListSerializer,
     EmployeeUpdateSerializer,
+    CompanyProfileSerializer,
 )
 #register
 #POST /api/v1/accounts/register/
@@ -214,7 +215,7 @@ class EmployeeActivationView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
-#company admin create role permission for his company
+#company admin create role permission (associate a permission with a role)for his company
 #POST /api/v1/accounts/roles/<role_id>/permissions/
 #company admin list permissions of a role
 #GET /api/v1/accounts/roles/<role_id>/permissions/
@@ -776,4 +777,69 @@ class RoleDetailView(APIView):
                 "role_id": role.id,
             },
             status=status.HTTP_200_OK,
+        )
+#company admin get his company profile
+#company admin update his company profile
+# GET /api/v1/accounts/companies/me/
+# PATCH /api/v1/accounts/companies/me/
+class CompanyProfileView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "ENTREPRISE_CONSULTER",
+        "PATCH": "ENTREPRISE_MODIFIER",
+    }
+
+    def get(self, request):
+
+        company = request.user.entreprise
+
+        if not company:
+            return Response(
+                {
+                    "detail": "Aucune entreprise associée à cet utilisateur."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CompanyProfileSerializer(company)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request):
+
+        company = request.user.entreprise
+
+        if not company:
+            return Response(
+                {
+                    "detail": "Aucune entreprise associée à cet utilisateur."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CompanyProfileSerializer(
+            company,
+            data=request.data,
+            partial=True,
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
         )
