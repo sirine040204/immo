@@ -163,7 +163,28 @@ class CompanyApprovalSerializer(serializers.Serializer):
             )
 
         return company
+# CompanyRejectionSerializer
+class CompanyRejectionSerializer(serializers.Serializer):
 
+    def save(self, **kwargs):
+        company = self.context["company"]
+
+        with transaction.atomic():
+
+            company.statut = Entreprise.Statut.REJETEE
+            company.save(update_fields=["statut"])
+
+            company_admins = User.objects.filter(
+                entreprise=company,
+                is_company_admin=True,
+            )
+
+            company_admins.update(
+                statut=User.Statut.REJETEE,
+                is_approved=False,
+            )
+
+        return company
 #EmployeeInvitationSerializer
 class EmployeeInvitationSerializer(serializers.Serializer):
 

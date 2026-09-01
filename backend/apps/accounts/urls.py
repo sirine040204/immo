@@ -13,6 +13,7 @@ from .views import (
     RoleDetailView,
     EmployeeDetailView,
     CompanyProfileView,
+    CompanyRejectionView,
 )
 
 urlpatterns = [
@@ -32,7 +33,11 @@ urlpatterns = [
         CompanyApprovalView.as_view(),
         name="company-approve",
     ),
-
+    path(
+    "companies/<int:company_id>/reject/",
+    CompanyRejectionView.as_view(),
+    name="company-reject",
+),
     path(
     "employees/invite/",
     EmployeeInvitationView.as_view(),
