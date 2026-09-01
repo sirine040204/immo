@@ -18,6 +18,8 @@ from .serializers import (
     EmployeeUpdateSerializer,
     CompanyProfileSerializer,
     CompanyRejectionSerializer,
+    CompanySuspensionSerializer,
+    CompanyReactivationSerializer,
 )
 #register
 #POST /api/v1/accounts/register/
@@ -147,6 +149,90 @@ class CompanyRejectionView(APIView):
         return Response(
             {
                 "message": "L'entreprise a été rejetée.",
+                "company_id": company.id_entreprise,
+            },
+            status=status.HTTP_200_OK,
+        )
+# Super Admin suspends company
+# POST /api/v1/accounts/companies/<actual_id>/suspend/
+class CompanySuspensionView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, company_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "detail": "Seul le Super Admin peut désactiver une entreprise."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            company = Entreprise.objects.get(
+                id_entreprise=company_id,
+                statut=Entreprise.Statut.ACTIVE,
+            )
+        except Entreprise.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Entreprise introuvable ou déjà désactivée."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CompanySuspensionSerializer(
+            context={"company": company}
+        )
+
+        serializer.save()
+
+        return Response(
+            {
+                "message": "L'entreprise a été désactivée.",
+                "company_id": company.id_entreprise,
+            },
+            status=status.HTTP_200_OK,
+        )
+# Super Admin reactivates company
+# POST /api/v1/accounts/companies/<actual_id>/reactivate/
+class CompanyReactivationView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, company_id):
+
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "detail": "Seul le Super Admin peut réactiver une entreprise."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            company = Entreprise.objects.get(
+                id_entreprise=company_id,
+                statut=Entreprise.Statut.DESACTIVE,
+            )
+        except Entreprise.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Entreprise introuvable ou déjà active."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CompanyReactivationSerializer(
+            context={"company": company}
+        )
+
+        serializer.save()
+
+        return Response(
+            {
+                "message": "L'entreprise a été réactivée.",
                 "company_id": company.id_entreprise,
             },
             status=status.HTTP_200_OK,

@@ -133,6 +133,11 @@ class LoginSerializer(serializers.Serializer):
                 "Votre compte est désactivé."
             )
 
+        if user.entreprise and user.entreprise.statut != Entreprise.Statut.ACTIVE:
+            raise serializers.ValidationError(
+                "Votre entreprise est désactivée."
+            )
+
         refresh = RefreshToken.for_user(user)
 
         attrs["user"] = user
@@ -183,6 +188,30 @@ class CompanyRejectionSerializer(serializers.Serializer):
                 statut=User.Statut.REJETEE,
                 is_approved=False,
             )
+
+        return company
+# CompanySuspensionSerializer
+class CompanySuspensionSerializer(serializers.Serializer):
+
+    def save(self, **kwargs):
+        company = self.context["company"]
+
+        with transaction.atomic():
+
+            company.statut = Entreprise.Statut.DESACTIVE
+            company.save(update_fields=["statut"])
+
+        return company
+# CompanyReactivationSerializer
+class CompanyReactivationSerializer(serializers.Serializer):
+
+    def save(self, **kwargs):
+        company = self.context["company"]
+
+        with transaction.atomic():
+
+            company.statut = Entreprise.Statut.ACTIVE
+            company.save(update_fields=["statut"])
 
         return company
 #EmployeeInvitationSerializer

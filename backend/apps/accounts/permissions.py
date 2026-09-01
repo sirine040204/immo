@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from .models import Entreprise
 
 
 def user_has_permission(user, permission_code):
@@ -6,6 +7,7 @@ def user_has_permission(user, permission_code):
     Vérifie si l'utilisateur possède une permission.
 
     - Super Admin : tous les droits sur l'application.
+    - Utilisateur d'une entreprise désactivée : aucun droit métier.
     - Company Admin : tous les droits dans sa propre entreprise.
     - Employé : droits accordés par son rôle.
     """
@@ -16,6 +18,10 @@ def user_has_permission(user, permission_code):
     # Super Admin
     if user.is_superuser:
         return True
+
+    # Company inactive
+    if user.entreprise and user.entreprise.statut != Entreprise.Statut.ACTIVE:
+        return False
 
     # Company Admin
     if user.is_company_admin:
