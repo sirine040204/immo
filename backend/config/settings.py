@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'corsheaders',
 
     'apps.accounts',
+    "apps.immobilisations",
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
