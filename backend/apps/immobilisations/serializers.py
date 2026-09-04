@@ -1,7 +1,8 @@
 from rest_framework import serializers
-
+from .models import AttributDynamique
 from .models import Famille
 
+#famille
 #get/patch/post famille
 class FamilleSerializer(serializers.ModelSerializer):
 
@@ -112,3 +113,107 @@ class FamilleRestoreSerializer(serializers.Serializer):
         famille.save(update_fields=["statut"])
 
         return famille
+
+#attributdynamique
+class AttributDynamiqueSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(
+    max_length=100,
+    required=True,
+    allow_blank=False,
+    )
+    class Meta:
+        model = AttributDynamique
+        fields = [
+            "id_attribut",
+            "famille",
+            "libelle",
+            "code",
+            "type_donnee",
+            "obligatoire",
+            "valeur_defaut",
+            "placeholder",
+            "valeur_min",
+            "valeur_max",
+            "longueur_min",
+            "longueur_max",
+            "ordre_affichage",
+            "statut",
+        ]
+        read_only_fields = [
+            "id_attribut",
+            "famille",
+            "statut",
+        ]
+
+    def validate(self, attrs):
+        instance = self.instance
+
+        valeur_min = attrs.get(
+            "valeur_min",
+            instance.valeur_min if instance else None
+        )
+        valeur_max = attrs.get(
+            "valeur_max",
+            instance.valeur_max if instance else None
+        )
+
+        longueur_min = attrs.get(
+            "longueur_min",
+            instance.longueur_min if instance else None
+        )
+        longueur_max = attrs.get(
+            "longueur_max",
+            instance.longueur_max if instance else None
+        )
+
+        type_donnee = attrs.get(
+            "type_donnee",
+            instance.type_donnee if instance else None
+        )
+
+        if (
+            valeur_min is not None
+            and valeur_max is not None
+            and valeur_min > valeur_max
+        ):
+            raise serializers.ValidationError({
+                "valeur_min": (
+                    "valeur_min doit être inférieure ou égale à valeur_max."
+                )
+            })
+
+        if (
+            longueur_min is not None
+            and longueur_max is not None
+            and longueur_min > longueur_max
+        ):
+            raise serializers.ValidationError({
+                "longueur_min": (
+                    "longueur_min doit être inférieure ou égale à longueur_max."
+                )
+            })
+
+        if type_donnee in [
+            AttributDynamique.TypeDonnee.NOMBRE,
+            AttributDynamique.TypeDonnee.DECIMAL,
+        ]:
+            if longueur_min is not None or longueur_max is not None:
+                raise serializers.ValidationError({
+                    "longueur_min": (
+                        "Les contraintes de longueur ne sont pas utilisées "
+                        "pour un attribut numérique."
+                    )
+                })
+
+        if type_donnee == AttributDynamique.TypeDonnee.TEXTE:
+            if valeur_min is not None or valeur_max is not None:
+                raise serializers.ValidationError({
+                    "valeur_min": (
+                        "Les contraintes numériques ne sont pas utilisées "
+                        "pour un attribut de type TEXTE."
+                    )
+                })
+
+        return attrs
+
+ 

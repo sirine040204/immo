@@ -5,10 +5,15 @@ from .views import (
     FamilleListCreateView,
     FamilleArchiveView,
     FamilleRestoreView,
+    AttributDynamiqueListCreateView,
+    AttributDynamiqueDetailView,
+    AttributDynamiqueArchiveView,
+    AttributDynamiqueRestoreView,
 )
 
 
 urlpatterns = [
+    #urls pour les familles
     path(
         "familles/",
         FamilleListCreateView.as_view(),
@@ -31,4 +36,28 @@ urlpatterns = [
     FamilleRestoreView.as_view(),
     name="famille-restore",
 ),
+
+    #urls pour les attributs dynamiques
+    path(
+    "attributs/",
+    AttributDynamiqueListCreateView.as_view(),
+    name="attribut-list-create",
+),
+#for get details,patch and delete attribut dynamique
+    path(
+    "attributs/<int:attribut_id>/",
+    AttributDynamiqueDetailView.as_view(),
+    name="attribut-detail",
+),
+    path(
+        "attributs/<int:attribut_id>/archive/",
+        AttributDynamiqueArchiveView.as_view(),
+        name="attribut-archive",
+    ),
+    path(
+    "attributs/<int:attribut_id>/restore/",
+    AttributDynamiqueRestoreView.as_view(),
+    name="attribut-restore",
+),
+
 ]

@@ -1,7 +1,7 @@
 from django.db import models
-from apps.accounts.models import Entreprise
+from ..accounts.models import Entreprise
 
-
+#famille
 class Famille(models.Model):
 
     class Statut(models.TextChoices):
@@ -45,3 +45,88 @@ class Famille(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.nom}"
+#attribut dynamique
+class AttributDynamique(models.Model):
+    class TypeDonnee(models.TextChoices):
+        TEXTE = "TEXTE", "Texte"
+        NOMBRE = "NOMBRE", "Nombre"
+        DECIMAL = "DECIMAL", "Décimal"
+        DATE = "DATE", "Date"
+        BOOLEEN = "BOOLEEN", "Booléen"
+        LISTE = "LISTE", "Liste"
+
+    class Statut(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        ARCHIVEE = "ARCHIVEE", "Archivée"
+
+    id_attribut = models.BigAutoField(primary_key=True)
+
+    famille = models.ForeignKey(
+        Famille,
+        on_delete=models.PROTECT,
+        related_name="attributs",
+    )
+
+    libelle = models.CharField(max_length=255)
+
+    code = models.CharField(
+        max_length=100,
+        unique=True,
+    )
+
+    type_donnee = models.CharField(
+        max_length=10,
+        choices=TypeDonnee.choices,
+    )
+
+    obligatoire = models.BooleanField(default=False)
+
+    valeur_defaut = models.TextField(
+        blank=True,
+    )
+
+    placeholder = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    valeur_min = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    valeur_max = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    longueur_min = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    longueur_max = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    ordre_affichage = models.PositiveIntegerField(
+        default=0,
+    )
+
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.ACTIVE,
+    )
+
+    class Meta:
+        db_table = "attribut_dynamique"
+        ordering = ["ordre_affichage", "id_attribut"]
+
+    def __str__(self):
+        return self.libelle
