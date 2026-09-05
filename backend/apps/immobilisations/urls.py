@@ -1,5 +1,5 @@
+from . import views
 from django.urls import path
-
 from .views import (
     FamilleDetailView,
     FamilleListCreateView,
@@ -60,4 +60,28 @@ urlpatterns = [
     name="attribut-restore",
 ),
 
+    #urls pour les options d'attributs dynamiques (list)
+    path(
+        "attributs/<int:attribut_id>/options/",
+        views.OptionAttributListCreateView.as_view(),
+        name="options-attribut",
+    ),
+
+    path(
+        "attributs/<int:attribut_id>/options/<int:option_id>/",
+        views.OptionAttributDetailView.as_view(),
+        name="option-attribut-detail",
+    ),
+
+    path(
+        "attributs/<int:attribut_id>/options/<int:option_id>/archive/",
+        views.ArchiverOptionAttributView.as_view(),
+        name="archiver-option-attribut",
+    ),
+
+    path(
+        "attributs/<int:attribut_id>/options/<int:option_id>/restore/",
+        views.RestaurerOptionAttributView.as_view(),
+        name="restaurer-option-attribut",
+    ),
 ]

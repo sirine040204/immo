@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import AttributDynamique
 from .models import Famille
-
+from .models import OptionAttribut
 #famille
 #get/patch/post famille
 class FamilleSerializer(serializers.ModelSerializer):
@@ -213,6 +213,39 @@ class AttributDynamiqueSerializer(serializers.ModelSerializer):
                         "pour un attribut de type TEXTE."
                     )
                 })
+
+        return attrs
+        
+#option pour l'attribut dynamique de type liste
+class OptionAttributSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OptionAttribut
+        fields = [
+            "id",
+            "attribut",
+            "libelle",
+            "code",
+            "ordre",
+            "statut",
+        ]
+        read_only_fields = [
+            "id",
+            "attribut",
+            "statut",
+        ]
+
+    def validate(self, attrs):
+        attribut = self.instance.attribut if self.instance else self.context.get("attribut")
+
+        if attribut is None:
+            raise serializers.ValidationError({
+                "attribut": "L'attribut dynamique est obligatoire."
+            })
+
+        if attribut.type_donnee != AttributDynamique.TypeDonnee.LISTE:
+            raise serializers.ValidationError({
+                "attribut": "Les options ne sont autorisées que pour un attribut de type LISTE."
+            })
 
         return attrs
 

@@ -3,16 +3,20 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 
 from ..accounts.permissions import HasPermission
 
-from .models import Famille, AttributDynamique
+from .models import Famille, AttributDynamique, OptionAttribut
 
 from .serializers import (
     FamilleSerializer,
     FamilleArchiveSerializer,
     FamilleRestoreSerializer,
     AttributDynamiqueSerializer,
+    OptionAttributSerializer,
 )
 
 #famille
@@ -543,5 +547,310 @@ class AttributDynamiqueRestoreView(APIView):
 
         return Response(
             serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+#options pour l'attribut dynamique de type liste
+
+#GET /api/v1/immobilisations/attributs/<attribut_id>/options/
+#POST /api/v1/immobilisations/attributs/<attribut_id>/options/
+class OptionAttributListCreateView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "OPTION_CONSULTER",
+        "POST": "OPTION_AJOUTER",
+    }
+
+    def get_attribut(self, request, attribut_id):
+        try:
+            return AttributDynamique.objects.get(
+                id_attribut=attribut_id,
+                famille__entreprise=request.user.entreprise,
+            )
+        except AttributDynamique.DoesNotExist:
+            return None
+
+    def get(self, request, attribut_id):
+        attribut = self.get_attribut(request, attribut_id)
+
+        if attribut is None:
+            return Response(
+                {"detail": "Attribut dynamique introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        options = OptionAttribut.objects.filter(
+            attribut=attribut
+        )
+
+        serializer = OptionAttributSerializer(
+            options,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, attribut_id):
+        attribut = self.get_attribut(request, attribut_id)
+
+        if attribut is None:
+            return Response(
+                {"detail": "Attribut dynamique introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if attribut.statut == AttributDynamique.Statut.ARCHIVEE:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible d'ajouter une option "
+                        "à un attribut archivé."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = OptionAttributSerializer(
+            data=request.data,
+            context={
+                "request": request,
+                "attribut": attribut,
+            },
+        )
+
+        if serializer.is_valid():
+            option = serializer.save(
+                attribut=attribut
+            )
+
+            return Response(
+                OptionAttributSerializer(
+                    option,
+                    context={"request": request},
+                ).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+#détail d'une option d'attribut dynamique
+#GET /api/v1/immobilisations/attributs/<attribut_id>/options/<option_id>/
+#PATCH /api/v1/immobilisations/attributs/<attribut_id>/options/<option_id>/
+#DELETE /api/v1/immobilisations/attributs/<attribut_id>/options/<option_id>/
+class OptionAttributDetailView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "OPTION_CONSULTER",
+        "PATCH": "OPTION_MODIFIER",
+        "DELETE": "OPTION_SUPPRIMER",
+    }
+
+    def get_object(self, request, attribut_id, option_id):
+        try:
+            return OptionAttribut.objects.get(
+                id=option_id,
+                attribut_id=attribut_id,
+                attribut__famille__entreprise=request.user.entreprise,
+            )
+        except OptionAttribut.DoesNotExist:
+            return None
+
+    def get(self, request, attribut_id, option_id):
+        option = self.get_object(request, attribut_id, option_id)
+
+        if option is None:
+            return Response(
+                {"detail": "Option introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = OptionAttributSerializer(
+            option,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, attribut_id, option_id):
+        option = self.get_object(request, attribut_id, option_id)
+
+        if option is None:
+            return Response(
+                {"detail": "Option introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if option.statut == OptionAttribut.Statut.ARCHIVEE:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible de modifier "
+                        "une option archivée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if option.attribut.statut == AttributDynamique.Statut.ARCHIVEE:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible de modifier une option "
+                        "dont l'attribut est archivé."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = OptionAttributSerializer(
+            option,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def delete(self, request, attribut_id, option_id):
+        option = self.get_object(request, attribut_id, option_id)
+
+        if option is None:
+            return Response(
+                {"detail": "Option introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if option.statut == OptionAttribut.Statut.ACTIVE:
+            return Response(
+                {
+                    "detail": (
+                        "Une option active doit être archivée "
+                        "avant de pouvoir être supprimée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        option.delete()
+
+        return Response(
+            {
+                "detail": "Option supprimée avec succès.",
+            },
+            status=status.HTTP_204_NO_CONTENT,
+        )
+#archive une option d'attribut dynamique
+#POST /api/v1/immobilisations/attributs/<attribut_id>/options/<option_id>/archive/
+class ArchiverOptionAttributView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "POST": "OPTION_ARCHIVER",
+    }
+
+    def post(self, request, attribut_id, option_id):
+        try:
+            option = OptionAttribut.objects.get(
+                id=option_id,
+                attribut_id=attribut_id,
+                attribut__famille__entreprise=request.user.entreprise,
+            )
+        except OptionAttribut.DoesNotExist:
+            return Response(
+                {"detail": "Option introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if option.statut == OptionAttribut.Statut.ARCHIVEE:
+            return Response(
+                {"detail": "Cette option est déjà archivée."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        option.statut = OptionAttribut.Statut.ARCHIVEE
+        option.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Option archivée avec succès."},
+            status=status.HTTP_200_OK,
+        )
+#restaurer une option d'attribut dynamique
+#POST /api/v1/immobilisations/attributs/<attribut_id>/options/<option_id>/restore/
+class RestaurerOptionAttributView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "POST": "OPTION_RESTAURER",
+    }
+
+    def post(self, request, attribut_id, option_id):
+        try:
+            option = OptionAttribut.objects.get(
+                id=option_id,
+                attribut_id=attribut_id,
+                attribut__famille__entreprise=request.user.entreprise,
+            )
+        except OptionAttribut.DoesNotExist:
+            return Response(
+                {"detail": "Option introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if option.attribut.statut == AttributDynamique.Statut.ARCHIVEE:
+            return Response(
+                {
+                    "detail": (
+                        "Impossible de restaurer une option "
+                        "lorsque son attribut est archivé."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if option.statut == OptionAttribut.Statut.ACTIVE:
+            return Response(
+                {"detail": "Cette option est déjà active."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        option.statut = OptionAttribut.Statut.ACTIVE
+        option.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Option restaurée avec succès."},
             status=status.HTTP_200_OK,
         )

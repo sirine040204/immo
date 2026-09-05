@@ -130,3 +130,36 @@ class AttributDynamique(models.Model):
 
     def __str__(self):
         return self.libelle
+        
+#option pour l'attribut dynamique de type liste
+class OptionAttribut(models.Model):
+    class Statut(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        ARCHIVEE = "ARCHIVEE", "Archivée"
+
+    id = models.BigAutoField(primary_key=True)
+
+    attribut = models.ForeignKey(
+        AttributDynamique,
+        on_delete=models.PROTECT,
+        related_name="options",
+    )
+
+    libelle = models.CharField(max_length=255)
+
+    code = models.CharField(max_length=100)
+
+    ordre = models.PositiveIntegerField(default=0)
+
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.ACTIVE,
+    )
+
+    class Meta:
+        db_table = "option_attribut"
+        ordering = ["ordre", "id"]
+
+    def __str__(self):
+        return self.libelle
