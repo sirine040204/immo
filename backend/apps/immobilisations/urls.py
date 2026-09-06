@@ -9,6 +9,10 @@ from .views import (
     AttributDynamiqueDetailView,
     AttributDynamiqueArchiveView,
     AttributDynamiqueRestoreView,
+    ImmobilisationListCreateView,
+    ImmobilisationDetailView,
+    ActiverImmobilisationView,
+    SupprimerImmobilisationView,
 )
 
 
@@ -84,4 +88,40 @@ urlpatterns = [
         views.RestaurerOptionAttributView.as_view(),
         name="restaurer-option-attribut",
     ),
+
+    # urls pour les immobilisations
+    path(
+        "immobilisations/",
+        ImmobilisationListCreateView.as_view(),
+        name="immobilisation-list-create",
+    ),
+
+    path(
+        "immobilisations/<int:immobilisation_id>/",
+        ImmobilisationDetailView.as_view(),
+        name="immobilisation-detail",
+    ),
+
+    path(
+    "immobilisations/<int:immobilisation_id>/delete/",
+    SupprimerImmobilisationView.as_view(),
+    name="immobilisation-delete",
+),
+    # Lifecycle des immobilisations
+    path(
+        "immobilisations/<int:immobilisation_id>/archive/",
+        views.ArchiverImmobilisationView.as_view(),
+        name="immobilisation-archive",
+    ),
+
+    path(
+        "immobilisations/<int:immobilisation_id>/restore/",
+        views.RestaurerImmobilisationView.as_view(),
+        name="immobilisation-restore",
+    ),
+    path(
+    "immobilisations/<int:immobilisation_id>/activate/",
+    ActiverImmobilisationView.as_view(),
+    name="immobilisation-activate",
+),
 ]

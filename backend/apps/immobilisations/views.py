@@ -8,15 +8,19 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from ..accounts.permissions import HasPermission
-
-from .models import Famille, AttributDynamique, OptionAttribut
-
+from .models import (
+    Famille,
+    AttributDynamique,
+    OptionAttribut,
+    Immobilisation,
+)
 from .serializers import (
     FamilleSerializer,
     FamilleArchiveSerializer,
     FamilleRestoreSerializer,
     AttributDynamiqueSerializer,
     OptionAttributSerializer,
+    ImmobilisationSerializer,
 )
 
 #famille
@@ -852,5 +856,351 @@ class RestaurerOptionAttributView(APIView):
 
         return Response(
             {"detail": "Option restaurée avec succès."},
+            status=status.HTTP_200_OK,
+        )
+
+# immobilisation
+
+# GET /api/v1/immobilisations/
+# POST /api/v1/immobilisations/
+class ImmobilisationListCreateView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+        "POST": "IMMOBILISATION_AJOUTER",
+    }
+
+    def get(self, request):
+        immobilisations = (
+            Immobilisation.objects
+            .filter(
+                entreprise=request.user.entreprise
+            )
+            .select_related(
+                "famille",
+                "cree_par",
+                "modifie_par",
+            )
+            .order_by(
+                "-date_creation",
+                "-id_immobilisation",
+            )
+        )
+
+        serializer = ImmobilisationSerializer(
+            immobilisations,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        serializer = ImmobilisationSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            immobilisation = serializer.save()
+
+            return Response(
+                ImmobilisationSerializer(
+                    immobilisation,
+                    context={"request": request},
+                ).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+# GET /api/v1/immobilisations/<int:immobilisation_id>/
+# PATCH /api/v1/immobilisations/<int:immobilisation_id>/
+class ImmobilisationDetailView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+        "PATCH": "IMMOBILISATION_MODIFIER",
+    }
+
+    def get_object(self, request, immobilisation_id):
+        try:
+            return (
+                Immobilisation.objects
+                .select_related(
+                    "famille",
+                    "cree_par",
+                    "modifie_par",
+                )
+                .get(
+                    id_immobilisation=immobilisation_id,
+                    entreprise=request.user.entreprise,
+                )
+            )
+        except Immobilisation.DoesNotExist:
+            return None
+
+    def get(self, request, immobilisation_id):
+        immobilisation = self.get_object(
+            request,
+            immobilisation_id,
+        )
+
+        if immobilisation is None:
+            return Response(
+                {
+                    "detail": "Immobilisation introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ImmobilisationSerializer(
+            immobilisation,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, immobilisation_id):
+        immobilisation = self.get_object(
+            request,
+            immobilisation_id,
+        )
+
+        if immobilisation is None:
+            return Response(
+                {
+                    "detail": "Immobilisation introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if (
+            immobilisation.statut
+            == Immobilisation.Statut.ARCHIVEE
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Une immobilisation archivée "
+                        "ne peut pas être modifiée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ImmobilisationSerializer(
+            immobilisation,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+# Archiver une immobilisation
+# POST /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/archive/
+class ArchiverImmobilisationView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "IMMOBILISATION_ARCHIVER"
+
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut == Immobilisation.Statut.ARCHIVEE:
+            return Response(
+                {"detail": "Cette immobilisation est déjà archivée."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.ARCHIVEE
+        immobilisation.modifie_par = request.user
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation archivée avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
+# Restaurer une immobilisation
+# POST /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/restore/
+class RestaurerImmobilisationView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "IMMOBILISATION_RESTAURER"
+
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.ARCHIVEE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation archivée "
+                        "peut être restaurée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.ACTIVE
+        immobilisation.modifie_par = request.user
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation restaurée avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
+# Activer une immobilisation
+# POST /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/activer/
+class ActiverImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "IMMOBILISATION_MODIFIER"
+
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.CREEE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation créée peut être activée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.ACTIVE
+        immobilisation.modifie_par = request.user
+
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation activée avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
+# Supprimer définitivement une immobilisation
+# DELETE /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/
+class SupprimerImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "IMMOBILISATION_SUPPRIMER"
+
+    def delete(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.CREEE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation créée et inutilisée "
+                        "peut être supprimée définitivement."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation_id = immobilisation.id_immobilisation
+        immobilisation.delete()
+
+        return Response(
+            {
+                "detail": "Immobilisation supprimée définitivement.",
+                "immobilisation_id": immobilisation_id,
+            },
             status=status.HTTP_200_OK,
         )
