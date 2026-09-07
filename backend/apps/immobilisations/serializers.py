@@ -1,8 +1,11 @@
+from django.utils import datastructures
 from rest_framework import serializers
+from decimal import Decimal
 from .models import AttributDynamique
 from .models import Famille
 from .models import OptionAttribut
 from .models import Immobilisation
+from .models import ValeurAttribut
 from django.utils import timezone
 
 #famille
@@ -124,6 +127,30 @@ class AttributDynamiqueSerializer(serializers.ModelSerializer):
     required=True,
     allow_blank=False,
     )
+    def validate_code(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Le code de l'attribut dynamique est obligatoire."
+            )
+
+        queryset = AttributDynamique.objects.filter(
+            code__iexact=value
+        )
+
+        if self.instance is not None:
+            queryset = queryset.exclude(
+                pk=self.instance.pk
+            )
+
+        if queryset.exists():
+            raise serializers.ValidationError(
+                "Un attribut dynamique avec ce code existe déjà."
+            )
+
+        return value
+    
     class Meta:
         model = AttributDynamique
         fields = [
@@ -173,6 +200,19 @@ class AttributDynamiqueSerializer(serializers.ModelSerializer):
             "type_donnee",
             instance.type_donnee if instance else None
         )
+        # Empêcher le changement de type si des valeurs existent déjà
+        if (
+            self.instance is not None
+            and "type_donnee" in attrs
+            and attrs["type_donnee"] != self.instance.type_donnee
+            and self.instance.valeurs.exists()
+        ):
+            raise serializers.ValidationError({
+                "type_donnee": (
+                    "Le type de donnée ne peut pas être modifié "
+                    "car cet attribut possède déjà des valeurs."
+                )
+            })
 
         if (
             valeur_min is not None
@@ -215,9 +255,10 @@ class AttributDynamiqueSerializer(serializers.ModelSerializer):
                         "Les contraintes numériques ne sont pas utilisées "
                         "pour un attribut de type TEXTE."
                     )
-                })
+                })       
 
         return attrs
+
         
 #option pour l'attribut dynamique de type liste
 class OptionAttributSerializer(serializers.ModelSerializer):
@@ -238,7 +279,11 @@ class OptionAttributSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        attribut = self.instance.attribut if self.instance else self.context.get("attribut")
+        attribut = (
+            self.instance.attribut
+            if self.instance
+            else self.context.get("attribut")
+        )
 
         if attribut is None:
             raise serializers.ValidationError({
@@ -247,8 +292,39 @@ class OptionAttributSerializer(serializers.ModelSerializer):
 
         if attribut.type_donnee != AttributDynamique.TypeDonnee.LISTE:
             raise serializers.ValidationError({
-                "attribut": "Les options ne sont autorisées que pour un attribut de type LISTE."
+                "attribut": (
+                    "Les options ne sont autorisées que pour "
+                    "un attribut de type LISTE."
+                )
             })
+
+        code = attrs.get("code")
+
+        if code is not None:
+            code = code.strip()
+
+            if not code:
+                raise serializers.ValidationError({
+                    "code": "Le code de l'option est obligatoire."
+                })
+
+            queryset = OptionAttribut.objects.filter(
+                attribut=attribut,
+                code__iexact=code,
+            )
+
+            if self.instance is not None:
+                queryset = queryset.exclude(pk=self.instance.pk)
+
+            if queryset.exists():
+                raise serializers.ValidationError({
+                    "code": (
+                        "Une option avec ce code existe déjà "
+                        "pour cet attribut."
+                    )
+                })
+
+            attrs["code"] = code
 
         return attrs
 
@@ -521,3 +597,353 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
         validated_data["modifie_par"] = request.user
 
         return super().update(instance, validated_data)
+
+# valeur attribut
+class ValeurAttributSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ValeurAttribut
+        fields = [
+            "id",
+            "immobilisation",
+            "attribut",
+            "option",
+            "valeur",
+        ]
+        read_only_fields = ["id"]
+        validators = []
+
+    def get_extra_kwargs(self):
+        extra_kwargs = super().get_extra_kwargs()
+
+        if self.instance is not None:
+            extra_kwargs["immobilisation"] = {
+                "read_only": True
+            }
+            extra_kwargs["attribut"] = {
+                "read_only": True
+            }
+
+        return extra_kwargs
+
+    def validate(self, attrs):
+        instance = self.instance
+
+        immobilisation = attrs.get(
+            "immobilisation",
+            instance.immobilisation if instance else None
+        )
+
+        attribut = attrs.get(
+            "attribut",
+            instance.attribut if instance else None
+        )
+
+        option = attrs.get(
+            "option",
+            instance.option if instance else None
+        )
+
+        valeur = attrs.get(
+            "valeur",
+            instance.valeur if instance else None
+        )
+
+        # Vérification de l'immobilisation
+        if immobilisation is None:
+            raise serializers.ValidationError({
+                "immobilisation": "L'immobilisation est obligatoire."
+            })
+
+        # Vérification de l'attribut
+        if attribut is None:
+            raise serializers.ValidationError({
+                "attribut": "L'attribut dynamique est obligatoire."
+            })
+
+        # Vérification de l'entreprise de l'utilisateur
+        request = self.context.get("request")
+
+        if request is None:
+            raise serializers.ValidationError(
+                "Contexte de requête manquant."
+            )
+
+        entreprise = request.user.entreprise
+
+        if entreprise is None:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        # Isolation entreprise : immobilisation
+        if immobilisation.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "immobilisation": (
+                    "Cette immobilisation n'appartient pas à votre entreprise."
+                )
+            })
+
+        # Isolation entreprise : attribut
+        if attribut.famille.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "attribut": (
+                    "Cet attribut n'appartient pas à votre entreprise."
+                )
+            })
+
+        # L'attribut doit appartenir à la même famille
+        # que l'immobilisation
+        if attribut.famille_id != immobilisation.famille_id:
+            raise serializers.ValidationError({
+                "attribut": (
+                    "Cet attribut n'appartient pas à la famille "
+                    "de cette immobilisation."
+                )
+            })
+
+        # Un attribut archivé ne peut plus recevoir de nouvelle valeur
+        if (
+            attribut.statut == AttributDynamique.Statut.ARCHIVEE
+            and (
+                instance is None
+                or "attribut" in attrs
+                or "valeur" in attrs
+                or "option" in attrs
+            )
+        ):
+            raise serializers.ValidationError({
+                "attribut": (
+                    "Un attribut archivé ne peut pas recevoir "
+                    "de nouvelle valeur."
+                )
+            })
+
+        type_donnee = attribut.type_donnee
+
+        # ============================================================
+        # TYPE LISTE
+        # ============================================================
+        if type_donnee == AttributDynamique.TypeDonnee.LISTE:
+
+            if option is None:
+                raise serializers.ValidationError({
+                    "option": (
+                        "Une option est obligatoire pour un attribut "
+                        "de type LISTE."
+                    )
+                })
+
+            # Une liste utilise option, pas valeur
+            if valeur not in [None, ""]:
+                raise serializers.ValidationError({
+                    "valeur": (
+                        "Le champ valeur ne doit pas être renseigné "
+                        "pour un attribut de type LISTE."
+                    )
+                })
+
+            # L'option doit appartenir au même attribut
+            if option.attribut_id != attribut.id_attribut:
+                raise serializers.ValidationError({
+                    "option": (
+                        "Cette option n'appartient pas à cet attribut."
+                    )
+                })
+
+            # Une option archivée ne peut pas être choisie
+            # pour une nouvelle/modification de valeur
+            if option.statut == OptionAttribut.Statut.ARCHIVEE:
+                if instance is None or option.id != instance.option_id:
+                    raise serializers.ValidationError({
+                        "option": (
+                            "Une option archivée ne peut pas être "
+                            "sélectionnée."
+                        )
+                    })
+
+        # ============================================================
+        # TYPES NON LISTE
+        # ============================================================
+        else:
+
+            if option is not None:
+                raise serializers.ValidationError({
+                    "option": (
+                        "Le champ option ne doit pas être renseigné "
+                        "pour un attribut qui n'est pas de type LISTE."
+                    )
+                })
+
+            if valeur in [None, ""]:
+                if attribut.obligatoire:
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            "La valeur est obligatoire pour cet attribut."
+                        )
+                    })
+
+                return attrs
+
+            # --------------------------------------------------------
+            # TEXTE
+            # --------------------------------------------------------
+            if type_donnee == AttributDynamique.TypeDonnee.TEXTE:
+
+                if not isinstance(valeur, str):
+                    raise serializers.ValidationError({
+                        "valeur": "La valeur doit être du texte."
+                    })
+
+                longueur = len(valeur)
+
+                if (
+                    attribut.longueur_min is not None
+                    and longueur < attribut.longueur_min
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur doit contenir au moins "
+                            f"{attribut.longueur_min} caractères."
+                        )
+                    })
+
+                if (
+                    attribut.longueur_max is not None
+                    and longueur > attribut.longueur_max
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur ne doit pas dépasser "
+                            f"{attribut.longueur_max} caractères."
+                        )
+                    })
+
+            # --------------------------------------------------------
+            # NOMBRE
+            # --------------------------------------------------------
+            elif type_donnee == AttributDynamique.TypeDonnee.NOMBRE:
+
+                try:
+                    nombre = Decimal(str(valeur))
+                except (ValueError, TypeError, ArithmeticError):
+                    raise serializers.ValidationError({
+                        "valeur": "La valeur doit être un nombre entier."
+                    })
+
+                if nombre != nombre.to_integral_value():
+                    raise serializers.ValidationError({
+                        "valeur": "La valeur doit être un nombre entier."
+                    })
+
+                nombre = nombre.to_integral_value()
+
+                if (
+                    attribut.valeur_min is not None
+                    and nombre < attribut.valeur_min
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur doit être supérieure ou égale "
+                            f"à {attribut.valeur_min}."
+                        )
+                    })
+
+                if (
+                    attribut.valeur_max is not None
+                    and nombre > attribut.valeur_max
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur doit être inférieure ou égale "
+                            f"à {attribut.valeur_max}."
+                        )
+                    })
+            # --------------------------------------------------------
+            # DECIMAL
+            # --------------------------------------------------------
+            elif type_donnee == AttributDynamique.TypeDonnee.DECIMAL:
+
+                try:
+                    nombre = Decimal(str(valeur))
+                except (ValueError, TypeError, ArithmeticError):
+                    raise serializers.ValidationError({
+                        "valeur": "La valeur doit être un nombre décimal."
+                    })
+
+                if (
+                    attribut.valeur_min is not None
+                    and nombre < attribut.valeur_min
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur doit être supérieure ou égale "
+                            f"à {attribut.valeur_min}."
+                        )
+                    })
+
+                if (
+                    attribut.valeur_max is not None
+                    and nombre > attribut.valeur_max
+                ):
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            f"La valeur doit être inférieure ou égale "
+                            f"à {attribut.valeur_max}."
+                        )
+                    })
+
+            # --------------------------------------------------------
+            # DATE
+            # --------------------------------------------------------
+            elif type_donnee == AttributDynamique.TypeDonnee.DATE:
+
+                try:
+                    date_value = serializers.DateField().to_internal_value(
+                        valeur
+                    )
+                except serializers.ValidationError:
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            "La valeur doit être une date valide "
+                            "au format YYYY-MM-DD."
+                        )
+                    })
+
+            # --------------------------------------------------------
+            # BOOLEEN
+            # --------------------------------------------------------
+            elif type_donnee == AttributDynamique.TypeDonnee.BOOLEEN:
+
+                if isinstance(valeur, bool):
+                    pass
+
+                elif str(valeur).lower() in ["true", "false"]:
+                    pass
+
+                else:
+                    raise serializers.ValidationError({
+                        "valeur": (
+                            "La valeur doit être true ou false."
+                        )
+                    })
+
+        # ============================================================
+        # UN SEUL VALEUR ATTRIBUT PAR IMMOBILISATION + ATTRIBUT
+        # ============================================================
+        queryset = ValeurAttribut.objects.filter(
+            immobilisation=immobilisation,
+            attribut=attribut,
+        )
+
+        if instance is not None:
+            queryset = queryset.exclude(pk=instance.pk)
+
+        if queryset.exists():
+            raise serializers.ValidationError({
+                "attribut": (
+                    "Une valeur existe déjà pour cet attribut "
+                    "et cette immobilisation."
+                )
+            })
+
+        return attrs

@@ -13,6 +13,7 @@ from .models import (
     AttributDynamique,
     OptionAttribut,
     Immobilisation,
+    ValeurAttribut,
 )
 from .serializers import (
     FamilleSerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     AttributDynamiqueSerializer,
     OptionAttributSerializer,
     ImmobilisationSerializer,
+    ValeurAttributSerializer,
 )
 
 #famille
@@ -860,9 +862,8 @@ class RestaurerOptionAttributView(APIView):
         )
 
 # immobilisation
-
-# GET /api/v1/immobilisations/
-# POST /api/v1/immobilisations/
+#GET /api/v1/immobilisations/immobilisations/
+#POST /api/v1/immobilisations/immobilisations/
 class ImmobilisationListCreateView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -923,8 +924,8 @@ class ImmobilisationListCreateView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
         )
-# GET /api/v1/immobilisations/<int:immobilisation_id>/
-# PATCH /api/v1/immobilisations/<int:immobilisation_id>/
+# GET /api/v1/immobilisations/immobilisations/<id>/
+# PATCH /api/v1/immobilisations/immobilisations/<id>/
 class ImmobilisationDetailView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -1025,7 +1026,7 @@ class ImmobilisationDetailView(APIView):
             status=status.HTTP_400_BAD_REQUEST,
         )
 # Archiver une immobilisation
-# POST /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/archive/
+# POST /api/v1/immobilisations/immobilisations/<id>/archive/
 class ArchiverImmobilisationView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -1070,7 +1071,7 @@ class ArchiverImmobilisationView(APIView):
             status=status.HTTP_200_OK,
         )
 # Restaurer une immobilisation
-# POST /api/v1/immobilisations/immobilisations/<int:immobilisation_id>/restore/
+# POST /api/v1/immobilisations/immobilisations/<id>/restore/
 class RestaurerImmobilisationView(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -1201,6 +1202,227 @@ class SupprimerImmobilisationView(APIView):
             {
                 "detail": "Immobilisation supprimée définitivement.",
                 "immobilisation_id": immobilisation_id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+# valeur attribut
+
+# GET /api/v1/immobilisations/valeurs-attributs/
+# POST /api/v1/immobilisations/valeurs-attributs/
+class ValeurAttributListCreateView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+        "POST": "IMMOBILISATION_MODIFIER",
+    }
+
+    def get(self, request):
+        valeurs = (
+            ValeurAttribut.objects
+            .filter(
+                immobilisation__entreprise=request.user.entreprise
+            )
+            .select_related(
+                "immobilisation",
+                "attribut",
+                "option",
+            )
+            .order_by("id")
+        )
+
+        serializer = ValeurAttributSerializer(
+            valeurs,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        serializer = ValeurAttributSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            valeur = serializer.save()
+
+            return Response(
+                ValeurAttributSerializer(
+                    valeur,
+                    context={"request": request},
+                ).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+# GET /api/v1/immobilisations/valeurs-attributs/<int:valeur_id>/
+# PATCH /api/v1/immobilisations/valeurs-attributs/<int:valeur_id>/
+# DELETE /api/v1/immobilisations/valeurs-attributs/<int:valeur_id>/
+class ValeurAttributDetailView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+        "PATCH": "IMMOBILISATION_MODIFIER",
+        "DELETE": "IMMOBILISATION_MODIFIER",
+    }
+
+    def get_object(self, request, valeur_id):
+        try:
+            return (
+                ValeurAttribut.objects
+                .select_related(
+                    "immobilisation",
+                    "attribut",
+                    "option",
+                )
+                .get(
+                    id=valeur_id,
+                    immobilisation__entreprise=request.user.entreprise,
+                )
+            )
+        except ValeurAttribut.DoesNotExist:
+            return None
+
+    def get(self, request, valeur_id):
+        valeur = self.get_object(
+            request,
+            valeur_id,
+        )
+
+        if valeur is None:
+            return Response(
+                {
+                    "detail": "Valeur d'attribut introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ValeurAttributSerializer(
+            valeur,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, valeur_id):
+        valeur = self.get_object(
+            request,
+            valeur_id,
+        )
+
+        if valeur is None:
+            return Response(
+                {
+                    "detail": "Valeur d'attribut introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Une immobilisation archivée ne peut plus être modifiée
+        if (
+            valeur.immobilisation.statut
+            == Immobilisation.Statut.ARCHIVEE
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Une valeur d'attribut appartenant "
+                        "à une immobilisation archivée "
+                        "ne peut pas être modifiée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ValeurAttributSerializer(
+            valeur,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def delete(self, request, valeur_id):
+        valeur = self.get_object(
+            request,
+            valeur_id,
+        )
+
+        if valeur is None:
+            return Response(
+                {
+                    "detail": "Valeur d'attribut introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Une immobilisation archivée ne peut plus être modifiée
+        if (
+            valeur.immobilisation.statut
+            == Immobilisation.Statut.ARCHIVEE
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Une valeur d'attribut appartenant "
+                        "à une immobilisation archivée "
+                        "ne peut pas être supprimée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if valeur.attribut.obligatoire:
+            return Response(
+                {
+                    "detail": (
+                        "La valeur d'un attribut obligatoire "
+                        "ne peut pas être supprimée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valeur_id = valeur.id
+        valeur.delete()
+
+        return Response(
+            {
+                "detail": "Valeur d'attribut supprimée avec succès.",
+                "valeur_id": valeur_id,
             },
             status=status.HTTP_200_OK,
         )

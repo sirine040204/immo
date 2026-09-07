@@ -333,3 +333,44 @@ class Immobilisation(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.designation}"
+
+#valeur des attributs dynamique pour chaque immobilisation
+class ValeurAttribut(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    immobilisation = models.ForeignKey(
+        Immobilisation,
+        on_delete=models.CASCADE,
+        related_name="valeurs_attributs",
+    )
+
+    attribut = models.ForeignKey(
+        AttributDynamique,
+        on_delete=models.PROTECT,
+        related_name="valeurs",
+    )
+
+    option = models.ForeignKey(
+        OptionAttribut,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="valeurs_attributs",
+    )
+
+    valeur = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "valeur_attribut"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["immobilisation", "attribut"],
+                name="unique_valeur_attribut_par_immobilisation",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.immobilisation} - {self.attribut}"

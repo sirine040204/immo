@@ -13,6 +13,8 @@ from .views import (
     ImmobilisationDetailView,
     ActiverImmobilisationView,
     SupprimerImmobilisationView,
+    ValeurAttributListCreateView,
+    ValeurAttributDetailView,
 )
 
 
@@ -124,4 +126,17 @@ urlpatterns = [
     ActiverImmobilisationView.as_view(),
     name="immobilisation-activate",
 ),
+
+    # URLs pour ValeurAttribut
+    path(
+        "valeurs-attributs/",
+        ValeurAttributListCreateView.as_view(),
+        name="valeur-attribut-list-create",
+    ),
+
+    path(
+        "valeurs-attributs/<int:valeur_id>/",
+        ValeurAttributDetailView.as_view(),
+        name="valeur-attribut-detail",
+    ),
 ]
