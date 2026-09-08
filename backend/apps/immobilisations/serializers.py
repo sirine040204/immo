@@ -1,4 +1,5 @@
 from django.utils import datastructures
+from django.db import transaction
 from rest_framework import serializers
 from decimal import Decimal
 from .models import AttributDynamique
@@ -6,6 +7,7 @@ from .models import Famille
 from .models import OptionAttribut
 from .models import Immobilisation
 from .models import ValeurAttribut
+from .models import ReleveUsage
 from django.utils import timezone
 
 #famille
@@ -600,6 +602,45 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
 
 # valeur attribut
 class ValeurAttributSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):
+        with transaction.atomic():
+            valeur_attribut = super().create(validated_data)
+
+            ReleveUsage.objects.create(
+                immobilisation=valeur_attribut.immobilisation,
+                attribut=valeur_attribut.attribut,
+                option=valeur_attribut.option,
+                valeur=valeur_attribut.valeur,
+            )
+
+            return valeur_attribut
+
+
+    def update(self, instance, validated_data):
+        ancienne_option_id = instance.option_id
+        ancienne_valeur = instance.valeur
+
+        with transaction.atomic():
+            valeur_attribut = super().update(instance, validated_data)
+
+            nouvelle_option_id = valeur_attribut.option_id
+            nouvelle_valeur = valeur_attribut.valeur
+
+            valeur_modifiee = (
+                ancienne_option_id != nouvelle_option_id
+                or ancienne_valeur != nouvelle_valeur
+            )
+
+            if valeur_modifiee:
+                ReleveUsage.objects.create(
+                    immobilisation=valeur_attribut.immobilisation,
+                    attribut=valeur_attribut.attribut,
+                    option=valeur_attribut.option,
+                    valeur=valeur_attribut.valeur,
+                )
+
+            return valeur_attribut
+
     class Meta:
         model = ValeurAttribut
         fields = [
@@ -947,3 +988,17 @@ class ValeurAttributSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+# Read only serialiser pour l'historisation
+class ReleveUsageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReleveUsage
+        fields = [
+            "id",
+            "immobilisation",
+            "attribut",
+            "option",
+            "valeur",
+            "date_releve",
+        ]
+        read_only_fields = fields

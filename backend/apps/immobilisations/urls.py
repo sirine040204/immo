@@ -15,6 +15,8 @@ from .views import (
     SupprimerImmobilisationView,
     ValeurAttributListCreateView,
     ValeurAttributDetailView,
+    ReleveUsageListView,
+    ReleveUsageDetailView,
 )
 
 
@@ -138,5 +140,17 @@ urlpatterns = [
         "valeurs-attributs/<int:valeur_id>/",
         ValeurAttributDetailView.as_view(),
         name="valeur-attribut-detail",
+    ),
+
+    # urls pour les releves d'usage
+    path(
+        "releves-usage/",
+        ReleveUsageListView.as_view(),
+        name="releve-usage-list",
+    ),
+    path(
+        "releves-usage/<int:releve_id>/",
+        ReleveUsageDetailView.as_view(),
+        name="releve-usage-detail",
     ),
 ]

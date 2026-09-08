@@ -374,3 +374,43 @@ class ValeurAttribut(models.Model):
 
     def __str__(self):
         return f"{self.immobilisation} - {self.attribut}"
+
+#releve d'usage  
+class ReleveUsage(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    immobilisation = models.ForeignKey(
+        Immobilisation,
+        on_delete=models.PROTECT,
+        related_name="releves_usage",
+    )
+
+    attribut = models.ForeignKey(
+        AttributDynamique,
+        on_delete=models.PROTECT,
+        related_name="releves_usage",
+    )
+
+    option = models.ForeignKey(
+        OptionAttribut,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="releves_usage",
+    )
+
+    valeur = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    date_releve = models.DateField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        db_table = "releve_usage"
+        ordering = ["date_releve", "id"]
+
+    def __str__(self):
+        return f"{self.immobilisation} - {self.attribut} - {self.date_releve}"

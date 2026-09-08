@@ -6,7 +6,6 @@ from rest_framework import serializers
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-
 from ..accounts.permissions import HasPermission
 from .models import (
     Famille,
@@ -14,6 +13,7 @@ from .models import (
     OptionAttribut,
     Immobilisation,
     ValeurAttribut,
+    ReleveUsage,
 )
 from .serializers import (
     FamilleSerializer,
@@ -23,6 +23,7 @@ from .serializers import (
     OptionAttributSerializer,
     ImmobilisationSerializer,
     ValeurAttributSerializer,
+    ReleveUsageSerializer,
 )
 
 #famille
@@ -1423,6 +1424,103 @@ class ValeurAttributDetailView(APIView):
             {
                 "detail": "Valeur d'attribut supprimée avec succès.",
                 "valeur_id": valeur_id,
+            },
+            status=status.HTTP_200_OK,
+        )
+#lister les releves d'usage
+#GET /api/v1/immobilisations/releves-usages/
+class ReleveUsageListView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+    }
+
+    def get(self, request):
+        releves = (
+            ReleveUsage.objects
+            .filter(
+                immobilisation__entreprise=request.user.entreprise
+            )
+            .select_related(
+                "immobilisation",
+                "attribut",
+                "option",
+            )
+            .order_by("date_releve", "id")
+        )
+
+        serializer = ReleveUsageSerializer(
+            releves,
+            many=True,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+#recuperer un releve d'usage 
+# GET /api/v1/immobilisations/releves-usages/<int:releve_id>/
+# DELETE /api/v1/immobilisations/releves-usages/<int:releve_id>/
+class ReleveUsageDetailView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+        "DELETE": "RELEVE_USAGE_SUPPRIMER",
+    }
+
+    def get_object(self, request, releve_id):
+        try:
+            return (
+                ReleveUsage.objects
+                .select_related(
+                    "immobilisation",
+                    "attribut",
+                    "option",
+                )
+                .get(
+                    id=releve_id,
+                    immobilisation__entreprise=request.user.entreprise,
+                )
+            )
+        except ReleveUsage.DoesNotExist:
+            return None
+
+    def get(self, request, releve_id):
+        releve = self.get_object(request, releve_id)
+
+        if releve is None:
+            return Response(
+                {"detail": "Relevé d'usage introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ReleveUsageSerializer(
+            releve,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+    def delete(self, request, releve_id):
+        releve = self.get_object(request, releve_id)
+
+        if releve is None:
+            return Response(
+                {"detail": "Relevé d'usage introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        releve.delete()
+
+        return Response(
+            {
+                "detail": "Relevé d'usage supprimé avec succès.",
+                "releve_id": releve_id,
             },
             status=status.HTTP_200_OK,
         )
