@@ -17,7 +17,11 @@ from .views import (
     ValeurAttributDetailView,
     ReleveUsageListView,
     ReleveUsageDetailView,
-)
+    MettreHorsServiceImmobilisationView,
+    RemettreEnServiceImmobilisationView,
+    ReformerImmobilisationView,
+    ResetTestImmobilisationView,
+    )
 
 
 urlpatterns = [
@@ -127,6 +131,30 @@ urlpatterns = [
     "immobilisations/<int:immobilisation_id>/activate/",
     ActiverImmobilisationView.as_view(),
     name="immobilisation-activate",
+),
+    #rest of immobilisation lifecycle
+    path(
+        "immobilisations/<int:immobilisation_id>/hors-service/",
+        MettreHorsServiceImmobilisationView.as_view(),
+        name="immobilisation-hors-service",
+    ),
+
+    path(
+        "immobilisations/<int:immobilisation_id>/remettre-en-service/",
+        RemettreEnServiceImmobilisationView.as_view(),
+        name="immobilisation-remettre-en-service",
+    ),
+
+    path(
+        "immobilisations/<int:immobilisation_id>/reformer/",
+        ReformerImmobilisationView.as_view(),
+        name="immobilisation-reformer",
+    ),
+    #only for dev testing
+    path(
+    "immobilisations/<int:immobilisation_id>/reset-test/",
+    ResetTestImmobilisationView.as_view(),
+    name="immobilisation-reset-test",
 ),
 
     # URLs pour ValeurAttribut

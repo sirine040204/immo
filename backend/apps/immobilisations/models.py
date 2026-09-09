@@ -170,7 +170,6 @@ class Immobilisation(models.Model):
     class Statut(models.TextChoices):
         CREEE = "CREEE", "Créée"
         ACTIVE = "ACTIVE", "Active"
-        EN_SERVICE = "EN_SERVICE", "En service"
         HORS_SERVICE = "HORS_SERVICE", "Hors service"
         REFORMEE = "REFORMEE", "Réformée"
         ARCHIVEE = "ARCHIVEE", "Archivée"

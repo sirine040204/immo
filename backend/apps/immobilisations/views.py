@@ -1,4 +1,5 @@
 from rest_framework import status
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,6 +25,7 @@ from .serializers import (
     ImmobilisationSerializer,
     ValeurAttributSerializer,
     ReleveUsageSerializer,
+    ReformerImmobilisationSerializer,
 )
 
 #famille
@@ -993,14 +995,14 @@ class ImmobilisationDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if (
-            immobilisation.statut
-            == Immobilisation.Statut.ARCHIVEE
-        ):
+        if immobilisation.statut in [
+            Immobilisation.Statut.ARCHIVEE,
+            Immobilisation.Statut.REFORMEE,
+        ]:
             return Response(
                 {
                     "detail": (
-                        "Une immobilisation archivée "
+                        "Une immobilisation archivée ou réformée "
                         "ne peut pas être modifiée."
                     )
                 },
@@ -1206,7 +1208,173 @@ class SupprimerImmobilisationView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+# Mettre hors service une immobilisation
+#POST /api/v1/immobilisations/immobilisations/<id>/hors-service/
+class MettreHorsServiceImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "IMMOBILISATION_MODIFIER"
 
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.ACTIVE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation active "
+                        "peut être mise hors service."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.HORS_SERVICE
+        immobilisation.modifie_par = request.user
+
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation mise hors service avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
+#Remettre en service une immobilisation mise hors service
+#POST /api/v1/immobilisations/immobilisations/<id>/remettre-en-service/
+class RemettreEnServiceImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "IMMOBILISATION_MODIFIER"
+
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.HORS_SERVICE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation hors service "
+                        "peut être remise en service."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.ACTIVE
+        immobilisation.modifie_par = request.user
+
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation remise en service avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+#Mettre immobilisation active ou hors service reformer
+#POST /api/v1/immobilisations/immobilisations/<id>/reformer/
+class ReformerImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+    required_permission = "IMMOBILISATION_MODIFIER"
+
+    def post(self, request, immobilisation_id):
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut not in [
+            Immobilisation.Statut.ACTIVE,
+            Immobilisation.Statut.HORS_SERVICE,
+        ]:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation active ou hors service "
+                        "peut être réformée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ReformerImmobilisationSerializer(
+            immobilisation,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.date_cession = serializer.validated_data["date_cession"]
+        immobilisation.prix_cession = serializer.validated_data.get(
+            "prix_cession"
+        )
+        immobilisation.motif_sortie = serializer.validated_data["motif_sortie"]
+
+        immobilisation.statut = Immobilisation.Statut.REFORMEE
+        immobilisation.modifie_par = request.user
+
+        immobilisation.save(
+            update_fields=[
+                "date_cession",
+                "prix_cession",
+                "motif_sortie",
+                "statut",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation réformée avec succès.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+            },
+            status=status.HTTP_200_OK,
+        )
 # valeur attribut
 
 # GET /api/v1/immobilisations/valeurs-attributs/
@@ -1521,6 +1689,80 @@ class ReleveUsageDetailView(APIView):
             {
                 "detail": "Relevé d'usage supprimé avec succès.",
                 "releve_id": releve_id,
+            },
+            status=status.HTTP_200_OK,
+        )
+#only for dev test
+class ResetTestImmobilisationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, immobilisation_id):
+        if not settings.DEBUG:
+            return Response(
+                {
+                    "detail": (
+                        "Cette opération est disponible uniquement "
+                        "en environnement de développement."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not request.user.is_company_admin:
+            return Response(
+                {
+                    "detail": (
+                        "Seul l'administrateur de l'entreprise "
+                        "peut réinitialiser une immobilisation de test."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            immobilisation = Immobilisation.objects.get(
+                id_immobilisation=immobilisation_id,
+                entreprise=request.user.entreprise,
+            )
+        except Immobilisation.DoesNotExist:
+            return Response(
+                {"detail": "Immobilisation introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if immobilisation.statut != Immobilisation.Statut.REFORMEE:
+            return Response(
+                {
+                    "detail": (
+                        "Seule une immobilisation réformée "
+                        "peut être réinitialisée."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        immobilisation.statut = Immobilisation.Statut.ACTIVE
+        immobilisation.date_cession = None
+        immobilisation.prix_cession = None
+        immobilisation.motif_sortie = ""
+        immobilisation.modifie_par = request.user
+
+        immobilisation.save(
+            update_fields=[
+                "statut",
+                "date_cession",
+                "prix_cession",
+                "motif_sortie",
+                "modifie_par",
+                "date_derniere_modification",
+            ]
+        )
+
+        return Response(
+            {
+                "detail": "Immobilisation de test réinitialisée.",
+                "immobilisation_id": immobilisation.id_immobilisation,
+                "statut": immobilisation.statut,
             },
             status=status.HTTP_200_OK,
         )

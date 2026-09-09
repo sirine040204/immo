@@ -73,9 +73,9 @@ class FamilleSerializer(serializers.ModelSerializer):
         return value
 
     def validate_taux_amortissement(self, value):
-        if value is not None and value < 0:
+        if value is not None and (value < 0 or value > 100):
             raise serializers.ValidationError(
-                "Le taux d'amortissement ne peut pas être négatif."
+                "Le taux d'amortissement doit être compris entre 0 et 100."
             )
 
         return value
@@ -397,6 +397,24 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
             )
 
         return value
+    def validate_date_mise_en_service(self, value):
+        today = timezone.localdate()
+
+        if value > today:
+            raise serializers.ValidationError(
+                "La date de mise en service ne peut pas être dans le futur."
+            )
+
+        return value
+    def validate_date_cession(self, value):
+        today = timezone.localdate()
+
+        if value > today:
+            raise serializers.ValidationError(
+                "La date de cession ne peut pas être dans le futur."
+            )
+
+        return value
 
     def validate_date_acquisition(self, value):
         today = timezone.localdate()
@@ -425,9 +443,9 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
         return value
 
     def validate_taux_amortissement(self, value):
-        if value is not None and value < 0:
+        if value is not None and (value < 0 or value > 100):
             raise serializers.ValidationError(
-                "Le taux d'amortissement ne peut pas être négatif."
+                "Le taux d'amortissement doit être compris entre 0 et 100."
             )
 
         return value
@@ -599,6 +617,65 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
         validated_data["modifie_par"] = request.user
 
         return super().update(instance, validated_data)
+
+#immobilisation reform operation : just update date_cession, prix_cession, motif_sortie and set status to REFORMEE
+class ReformerImmobilisationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Immobilisation
+        fields = [
+            "date_cession",
+            "prix_cession",
+            "motif_sortie",
+        ]
+
+    def validate_date_cession(self, value):
+        today = timezone.localdate()
+
+        if value > today:
+            raise serializers.ValidationError(
+                "La date de cession ne peut pas être dans le futur."
+            )
+
+        return value
+
+    def validate_prix_cession(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                "Le prix de cession ne peut pas être négatif."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        date_cession = attrs.get("date_cession")
+        prix_cession = attrs.get("prix_cession")
+        motif_sortie = attrs.get("motif_sortie")
+
+        if date_cession is None:
+            raise serializers.ValidationError({
+                "date_cession": (
+                    "La date de cession est obligatoire "
+                    "pour réformer une immobilisation."
+                )
+            })
+
+        if not motif_sortie:
+            raise serializers.ValidationError({
+                "motif_sortie": (
+                    "Le motif de sortie est obligatoire "
+                    "pour réformer une immobilisation."
+                )
+            })
+
+        if self.instance is not None:
+            if date_cession < self.instance.date_acquisition:
+                raise serializers.ValidationError({
+                    "date_cession": (
+                        "La date de cession ne peut pas être "
+                        "antérieure à la date d'acquisition."
+                    )
+                })       
+        return attrs
 
 # valeur attribut
 class ValeurAttributSerializer(serializers.ModelSerializer):
