@@ -6,6 +6,11 @@ from .views import (
     TypeEntretienArchiveView,
     TypeEntretienRestoreView,
     TypeEntretienDeleteView,
+    ModeleEntretienListCreateView,
+    ModeleEntretienDetailView,
+    ModeleEntretienArchiveView,
+    ModeleEntretienRestoreView,
+    ModeleEntretienDeleteView,
 )
 
 
@@ -37,4 +42,34 @@ urlpatterns = [
         TypeEntretienDeleteView.as_view(),
         name="type-entretien-delete",
     ),
+    #modele entretien urls
+    path(
+    "modeles-entretien/",
+    ModeleEntretienListCreateView.as_view(),
+    name="modele-entretien-list-create",
+),
+
+path(
+    "modeles-entretien/<int:modele_entretien_id>/",
+    ModeleEntretienDetailView.as_view(),
+    name="modele-entretien-detail",
+),
+
+path(
+    "modeles-entretien/<int:modele_entretien_id>/archive/",
+    ModeleEntretienArchiveView.as_view(),
+    name="modele-entretien-archive",
+),
+
+path(
+    "modeles-entretien/<int:modele_entretien_id>/restore/",
+    ModeleEntretienRestoreView.as_view(),
+    name="modele-entretien-restore",
+),
+
+path(
+    "modeles-entretien/<int:modele_entretien_id>/delete/",
+    ModeleEntretienDeleteView.as_view(),
+    name="modele-entretien-delete",
+),
 ]

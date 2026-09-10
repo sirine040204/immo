@@ -2,9 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics
 
-from .models import TypeEntretien
-from .serializers import TypeEntretienSerializer
+from .models import TypeEntretien, ModeleEntretien
+from .serializers import TypeEntretienSerializer, ModeleEntretienSerializer
 from ..accounts.permissions import HasPermission
 
 #type entretien views
@@ -261,3 +262,119 @@ class TypeEntretienDeleteView(APIView):
         return Response(
             status=status.HTTP_204_NO_CONTENT,
         )
+
+#modele entretien
+#GET /api/v1/maintenance/modeles-entretien/
+#POST /api/v1/maintenance/modeles-entretien/
+class ModeleEntretienListCreateView(generics.ListCreateAPIView):
+    serializer_class = ModeleEntretienSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "MODELE_ENTRETIEN_CONSULTER",
+        "POST": "MODELE_ENTRETIEN_AJOUTER",
+    }
+
+    def get_queryset(self):
+        return ModeleEntretien.objects.filter(
+            entreprise=self.request.user.entreprise
+        ).select_related(
+            "famille",
+            "type_entretien",
+        )
+
+#GET /api/v1/maintenance/modeles-entretien/<id>/
+#PATCH /api/v1/maintenance/modeles-entretien/<id>/
+class ModeleEntretienDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = ModeleEntretienSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+    lookup_url_kwarg = "modele_entretien_id"
+
+    required_permission = {
+        "GET": "MODELE_ENTRETIEN_CONSULTER",
+        "PATCH": "MODELE_ENTRETIEN_MODIFIER",
+    }
+
+    def get_queryset(self):
+        return ModeleEntretien.objects.filter(
+            entreprise=self.request.user.entreprise
+        ).select_related(
+            "famille",
+            "type_entretien",
+        )
+
+#POST /api/v1/maintenance/modeles-entretien/<id>/archive/
+class ModeleEntretienArchiveView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "MODELE_ENTRETIEN_ARCHIVER"
+
+    def post(self, request, modele_entretien_id):
+        try:
+            modele = ModeleEntretien.objects.get(
+                id=modele_entretien_id,
+                entreprise=request.user.entreprise,
+            )
+        except ModeleEntretien.DoesNotExist:
+            return Response(
+                {"detail": "Modèle d'entretien introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if modele.statut == ModeleEntretien.Statut.ARCHIVE:
+            return Response(
+                {"detail": "Le modèle d'entretien est déjà archivé."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        modele.statut = ModeleEntretien.Statut.ARCHIVE
+        modele.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Modèle d'entretien archivé avec succès."},
+            status=status.HTTP_200_OK,
+        )
+
+#POST /api/v1/maintenance/modeles-entretien/<id>/restore/
+class ModeleEntretienRestoreView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "MODELE_ENTRETIEN_RESTAURER"
+
+    def post(self, request, modele_entretien_id):
+        try:
+            modele = ModeleEntretien.objects.get(
+                id=modele_entretien_id,
+                entreprise=request.user.entreprise,
+            )
+        except ModeleEntretien.DoesNotExist:
+            return Response(
+                {"detail": "Modèle d'entretien introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if modele.statut == ModeleEntretien.Statut.ACTIF:
+            return Response(
+                {"detail": "Le modèle d'entretien est déjà actif."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        modele.statut = ModeleEntretien.Statut.ACTIF
+        modele.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Modèle d'entretien restauré avec succès."},
+            status=status.HTTP_200_OK,
+        )
+#DELETE /api/v1/maintenance/modeles-entretien/<id>/delete/
+class ModeleEntretienDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "MODELE_ENTRETIEN_SUPPRIMER"
+
+    def get_queryset(self):
+        return ModeleEntretien.objects.filter(
+            entreprise=self.request.user.entreprise
+        )
+
+    lookup_url_kwarg = "modele_entretien_id"
