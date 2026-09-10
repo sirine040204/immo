@@ -24,4 +24,8 @@ urlpatterns = [
     "api/v1/immobilisations/",
     include("apps.immobilisations.urls"),
 ),
+    path(
+    "api/v1/maintenance/",
+    include("apps.maintenance.urls"),
+),
 ]
