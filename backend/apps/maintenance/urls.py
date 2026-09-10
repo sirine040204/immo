@@ -11,6 +11,11 @@ from .views import (
     ModeleEntretienArchiveView,
     ModeleEntretienRestoreView,
     ModeleEntretienDeleteView,
+    EtapeEntretienListCreateView,
+    EtapeEntretienDetailView,
+    EtapeEntretienArchiveView,
+    EtapeEntretienRestoreView,
+    EtapeEntretienDeleteView,
 )
 
 
@@ -71,5 +76,31 @@ path(
     "modeles-entretien/<int:modele_entretien_id>/delete/",
     ModeleEntretienDeleteView.as_view(),
     name="modele-entretien-delete",
+),
+#etape entretien urls
+path(
+    "etapes-entretien/",
+    EtapeEntretienListCreateView.as_view(),
+    name="etape-entretien-list-create",
+),
+path(
+    "etapes-entretien/<int:etape_entretien_id>/",
+    EtapeEntretienDetailView.as_view(),
+    name="etape-entretien-detail",
+),
+path(
+    "etapes-entretien/<int:etape_entretien_id>/archive/",
+    EtapeEntretienArchiveView.as_view(),
+    name="etape-entretien-archive",
+),
+path(
+    "etapes-entretien/<int:etape_entretien_id>/restore/",
+    EtapeEntretienRestoreView.as_view(),
+    name="etape-entretien-restore",
+),
+path(
+    "etapes-entretien/<int:etape_entretien_id>/delete/",
+    EtapeEntretienDeleteView.as_view(),
+    name="etape-entretien-delete",
 ),
 ]

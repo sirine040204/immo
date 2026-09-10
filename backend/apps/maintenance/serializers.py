@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from ..immobilisations.models import Famille
-from .models import TypeEntretien, ModeleEntretien
+from .models import TypeEntretien, ModeleEntretien, EtapeEntretien
 
 #serialiseur type entretien
 class TypeEntretienSerializer(serializers.ModelSerializer):
@@ -450,3 +450,110 @@ class ModeleEntretienSerializer(serializers.ModelSerializer):
         validated_data["entreprise"] = request.user.entreprise
 
         return super().create(validated_data)
+
+#serializer etape entretien
+class EtapeEntretienSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = EtapeEntretien
+        fields = [
+            "id",
+            "modele_entretien",
+            "libelle",
+            "description",
+            "ordre",
+            "obligatoire",
+            "statut",
+        ]
+        read_only_fields = ["id", "statut"]
+
+    def validate_modele_entretien(self, value):
+        request = self.context.get("request")
+
+        if request is None:
+            raise serializers.ValidationError(
+                "Contexte de requête manquant."
+            )
+
+        entreprise = request.user.entreprise
+
+        if entreprise is None:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        if value.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError(
+                "Le modèle d'entretien doit appartenir à votre entreprise."
+            )
+
+        if value.statut != ModeleEntretien.Statut.ACTIF:
+            raise serializers.ValidationError(
+                "Le modèle d'entretien sélectionné est archivé."
+            )
+
+        return value
+
+    def validate_libelle(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Le libellé de l'étape d'entretien est obligatoire."
+            )
+
+        return value
+
+    def validate_description(self, value):
+        return value.strip()
+
+    def validate_ordre(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "L'ordre doit être supérieur à 0."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        modele_entretien = attrs.get(
+            "modele_entretien",
+            self.instance.modele_entretien
+            if self.instance is not None
+            else None
+        )
+
+        ordre = attrs.get(
+            "ordre",
+            self.instance.ordre
+            if self.instance is not None
+            else None
+        )
+
+        if modele_entretien is None:
+            raise serializers.ValidationError({
+                "modele_entretien":
+                    "Le modèle d'entretien est obligatoire."
+            })
+
+        if ordre is None:
+            raise serializers.ValidationError({
+                "ordre":
+                    "L'ordre est obligatoire."
+            })
+
+        queryset = EtapeEntretien.objects.filter(
+            modele_entretien=modele_entretien,
+            ordre=ordre,
+        )
+
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if queryset.exists():
+            raise serializers.ValidationError({
+                "ordre":
+                    "Une étape avec cet ordre existe déjà pour ce modèle d'entretien."
+            })
+
+        return attrs

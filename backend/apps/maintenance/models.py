@@ -3,7 +3,7 @@ from django.db import models
 from ..accounts.models import Entreprise
 from ..immobilisations.models import Famille
 
-
+#type entretien
 class TypeEntretien(models.Model):
 
     class Statut(models.TextChoices):
@@ -159,3 +159,45 @@ class ModeleEntretien(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.nom}"
+
+#EtapeEntretien
+class EtapeEntretien(models.Model):
+
+    class Statut(models.TextChoices):
+        ACTIF = "ACTIF", "Actif"
+        ARCHIVE = "ARCHIVE", "Archivé"
+
+    id = models.BigAutoField(primary_key=True)
+
+    modele_entretien = models.ForeignKey(
+        ModeleEntretien,
+        on_delete=models.PROTECT,
+        related_name="etapes"
+    )
+
+    libelle = models.CharField(max_length=255)
+
+    description = models.TextField(blank=True)
+
+    ordre = models.PositiveIntegerField()
+
+    obligatoire = models.BooleanField(default=True)
+
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.ACTIF
+    )
+
+    class Meta:
+        db_table = "etape_entretien"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["modele_entretien", "ordre"],
+                name="unique_etape_ordre_par_modele"
+            ),
+        ]
+        ordering = ["ordre", "id"]
+
+    def __str__(self):
+        return f"{self.ordre} - {self.libelle}"

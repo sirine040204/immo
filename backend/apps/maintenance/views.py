@@ -4,8 +4,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics
 
-from .models import TypeEntretien, ModeleEntretien
-from .serializers import TypeEntretienSerializer, ModeleEntretienSerializer
+from .models import TypeEntretien, ModeleEntretien, EtapeEntretien
+from .serializers import TypeEntretienSerializer, ModeleEntretienSerializer, EtapeEntretienSerializer
 from ..accounts.permissions import HasPermission
 
 #type entretien views
@@ -378,3 +378,116 @@ class ModeleEntretienDeleteView(generics.DestroyAPIView):
         )
 
     lookup_url_kwarg = "modele_entretien_id"
+
+#etape entretien
+#GET /api/v1/maintenance/etapes-entretien/
+#POST /api/v1/maintenance/etapes-entretien/
+class EtapeEntretienListCreateView(generics.ListCreateAPIView):
+    serializer_class = EtapeEntretienSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "ETAPE_ENTRETIEN_CONSULTER",
+        "POST": "ETAPE_ENTRETIEN_AJOUTER",
+    }
+
+    def get_queryset(self):
+        return EtapeEntretien.objects.filter(
+            modele_entretien__entreprise=self.request.user.entreprise
+        ).select_related(
+            "modele_entretien",
+        )
+
+#GET /api/v1/maintenance/etapes-entretien/<id>/
+#PATCH /api/v1/maintenance/etapes-entretien/<id>/
+class EtapeEntretienDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = EtapeEntretienSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+    lookup_url_kwarg = "etape_entretien_id"
+
+    required_permission = {
+        "GET": "ETAPE_ENTRETIEN_CONSULTER",
+        "PATCH": "ETAPE_ENTRETIEN_MODIFIER",
+    }
+
+    def get_queryset(self):
+        return EtapeEntretien.objects.filter(
+            modele_entretien__entreprise=self.request.user.entreprise
+        ).select_related(
+            "modele_entretien",
+        )
+
+#POST /api/v1/maintenance/etapes-entretien/<id>/archive/
+class EtapeEntretienArchiveView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "ETAPE_ENTRETIEN_ARCHIVER"
+
+    def post(self, request, etape_entretien_id):
+        try:
+            etape = EtapeEntretien.objects.get(
+                id=etape_entretien_id,
+                modele_entretien__entreprise=request.user.entreprise,
+            )
+        except EtapeEntretien.DoesNotExist:
+            return Response(
+                {"detail": "Étape d'entretien introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if etape.statut == EtapeEntretien.Statut.ARCHIVE:
+            return Response(
+                {"detail": "L'étape d'entretien est déjà archivée."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        etape.statut = EtapeEntretien.Statut.ARCHIVE
+        etape.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Étape d'entretien archivée avec succès."},
+            status=status.HTTP_200_OK,
+        )
+#POST /api/v1/maintenance/etapes-entretien/<id>/restore/
+class EtapeEntretienRestoreView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "ETAPE_ENTRETIEN_RESTAURER"
+
+    def post(self, request, etape_entretien_id):
+        try:
+            etape = EtapeEntretien.objects.get(
+                id=etape_entretien_id,
+                modele_entretien__entreprise=request.user.entreprise,
+            )
+        except EtapeEntretien.DoesNotExist:
+            return Response(
+                {"detail": "Étape d'entretien introuvable."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if etape.statut == EtapeEntretien.Statut.ACTIF:
+            return Response(
+                {"detail": "L'étape d'entretien est déjà active."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        etape.statut = EtapeEntretien.Statut.ACTIF
+        etape.save(update_fields=["statut"])
+
+        return Response(
+            {"detail": "Étape d'entretien restaurée avec succès."},
+            status=status.HTTP_200_OK,
+        )
+#DELETE /api/v1/maintenance/etapes-entretien/<id>/delete/
+class EtapeEntretienDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = "ETAPE_ENTRETIEN_SUPPRIMER"
+
+    lookup_url_kwarg = "etape_entretien_id"
+
+    def get_queryset(self):
+        return EtapeEntretien.objects.filter(
+            modele_entretien__entreprise=self.request.user.entreprise
+        )
