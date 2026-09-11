@@ -1,12 +1,23 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.utils import timezone
+from django.db.models import ProtectedError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import generics
-
-from .models import TypeEntretien, ModeleEntretien, EtapeEntretien
-from .serializers import TypeEntretienSerializer, ModeleEntretienSerializer, EtapeEntretienSerializer
+from rest_framework import generics, serializers
 from ..accounts.permissions import HasPermission
+
+from .models import (TypeEntretien,
+    ModeleEntretien,
+    EtapeEntretien,
+    Intervention,
+    )
+from .serializers import (TypeEntretienSerializer,
+    ModeleEntretienSerializer, 
+    EtapeEntretienSerializer,
+    InterventionSerializer,
+    InterventionStatutSerializer,
+    )
 
 #type entretien views
 
@@ -491,3 +502,130 @@ class EtapeEntretienDeleteView(generics.DestroyAPIView):
         return EtapeEntretien.objects.filter(
             modele_entretien__entreprise=self.request.user.entreprise
         )
+
+#Intervention
+#GET   /api/v1/maintenance/interventions/
+#POST  /api/v1/maintenance/interventions/
+class InterventionListCreateView(generics.ListCreateAPIView):
+    serializer_class = InterventionSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "INTERVENTION_CONSULTER",
+        "POST": "INTERVENTION_AJOUTER",
+    }
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return Intervention.objects.none()
+
+        return (
+            Intervention.objects
+            .filter(entreprise=user.entreprise)
+            .select_related(
+                "entreprise",
+                "immobilisation",
+                "modele_entretien",
+                "type_entretien",
+                "demande_par",
+            )
+        )
+
+#GET   /api/v1/maintenance/interventions/{id}/
+#PATCH /api/v1/maintenance/interventions/{id}/
+#DELETE /api/v1/maintenance/interventions/{id}/
+class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = InterventionSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "INTERVENTION_CONSULTER",
+        "PATCH": "INTERVENTION_MODIFIER",
+        "DELETE": "INTERVENTION_SUPPRIMER",
+    }
+
+    # We deliberately expose PATCH, not PUT.
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return Intervention.objects.none()
+
+        return (
+            Intervention.objects
+            .filter(entreprise=user.entreprise)
+            .select_related(
+                "entreprise",
+                "immobilisation",
+                "modele_entretien",
+                "type_entretien",
+                "demande_par",
+            )
+        )
+
+#PATCH /api/v1/maintenance/interventions/{id}/statut/
+class InterventionStatutView(generics.GenericAPIView):
+    serializer_class = InterventionStatutSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "PATCH": "INTERVENTION_MODIFIER",
+    }
+
+    http_method_names = ["patch", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return Intervention.objects.none()
+
+        return (
+            Intervention.objects
+            .filter(entreprise=user.entreprise)
+        )
+
+    def patch(self, request, *args, **kwargs):
+        intervention = self.get_object()
+
+        serializer = self.get_serializer(
+            data=request.data,
+            context={
+                "request": request,
+                "intervention": intervention,
+            },
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        nouveau_statut = serializer.validated_data["statut"]
+
+        today = timezone.localdate()
+
+        intervention.statut = nouveau_statut
+
+        if nouveau_statut == Intervention.Statut.EN_COURS:
+            intervention.date_debut = today
+
+        elif nouveau_statut == Intervention.Statut.TERMINEE:
+            intervention.date_fin = today
+
+        intervention.save(
+            update_fields=[
+                "statut",
+                "date_debut",
+                "date_fin",
+            ]
+        )
+
+        return Response(
+            InterventionSerializer(
+                intervention,
+                context={"request": request},
+            ).data
+        )
+

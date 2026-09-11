@@ -16,6 +16,9 @@ from .views import (
     EtapeEntretienArchiveView,
     EtapeEntretienRestoreView,
     EtapeEntretienDeleteView,
+    InterventionListCreateView,
+    InterventionDetailView,
+    InterventionStatutView,
 )
 
 
@@ -52,55 +55,72 @@ urlpatterns = [
     "modeles-entretien/",
     ModeleEntretienListCreateView.as_view(),
     name="modele-entretien-list-create",
-),
+    ),
 
-path(
-    "modeles-entretien/<int:modele_entretien_id>/",
-    ModeleEntretienDetailView.as_view(),
-    name="modele-entretien-detail",
-),
+    path(
+        "modeles-entretien/<int:modele_entretien_id>/",
+        ModeleEntretienDetailView.as_view(),
+        name="modele-entretien-detail",
+    ),
 
-path(
-    "modeles-entretien/<int:modele_entretien_id>/archive/",
-    ModeleEntretienArchiveView.as_view(),
-    name="modele-entretien-archive",
-),
+    path(
+        "modeles-entretien/<int:modele_entretien_id>/archive/",
+        ModeleEntretienArchiveView.as_view(),
+        name="modele-entretien-archive",
+    ),
 
-path(
-    "modeles-entretien/<int:modele_entretien_id>/restore/",
-    ModeleEntretienRestoreView.as_view(),
-    name="modele-entretien-restore",
-),
+    path(
+        "modeles-entretien/<int:modele_entretien_id>/restore/",
+        ModeleEntretienRestoreView.as_view(),
+        name="modele-entretien-restore",
+    ),
 
-path(
-    "modeles-entretien/<int:modele_entretien_id>/delete/",
-    ModeleEntretienDeleteView.as_view(),
-    name="modele-entretien-delete",
-),
-#etape entretien urls
-path(
-    "etapes-entretien/",
-    EtapeEntretienListCreateView.as_view(),
-    name="etape-entretien-list-create",
-),
-path(
-    "etapes-entretien/<int:etape_entretien_id>/",
-    EtapeEntretienDetailView.as_view(),
-    name="etape-entretien-detail",
-),
-path(
-    "etapes-entretien/<int:etape_entretien_id>/archive/",
-    EtapeEntretienArchiveView.as_view(),
-    name="etape-entretien-archive",
-),
-path(
-    "etapes-entretien/<int:etape_entretien_id>/restore/",
-    EtapeEntretienRestoreView.as_view(),
-    name="etape-entretien-restore",
-),
-path(
-    "etapes-entretien/<int:etape_entretien_id>/delete/",
-    EtapeEntretienDeleteView.as_view(),
-    name="etape-entretien-delete",
-),
+    path(
+        "modeles-entretien/<int:modele_entretien_id>/delete/",
+        ModeleEntretienDeleteView.as_view(),
+        name="modele-entretien-delete",
+    ),
+    #etape entretien urls
+    path(
+        "etapes-entretien/",
+        EtapeEntretienListCreateView.as_view(),
+        name="etape-entretien-list-create",
+    ),
+    path(
+        "etapes-entretien/<int:etape_entretien_id>/",
+        EtapeEntretienDetailView.as_view(),
+        name="etape-entretien-detail",
+    ),
+    path(
+        "etapes-entretien/<int:etape_entretien_id>/archive/",
+        EtapeEntretienArchiveView.as_view(),
+        name="etape-entretien-archive",
+    ),
+    path(
+        "etapes-entretien/<int:etape_entretien_id>/restore/",
+        EtapeEntretienRestoreView.as_view(),
+        name="etape-entretien-restore",
+    ),
+    path(
+        "etapes-entretien/<int:etape_entretien_id>/delete/",
+        EtapeEntretienDeleteView.as_view(),
+        name="etape-entretien-delete",
+    ),
+    #intervention urls
+    path(
+        "interventions/",
+        InterventionListCreateView.as_view(),
+        name="intervention-list-create",
+    ),
+    path(
+        "interventions/<int:pk>/",
+        InterventionDetailView.as_view(),
+        name="intervention-detail",
+    ),
+    #intervention status urls
+    path(
+        "interventions/<int:pk>/statut/",
+        InterventionStatutView.as_view(),
+        name="intervention-statut",
+    ),
 ]

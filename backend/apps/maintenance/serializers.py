@@ -1,7 +1,13 @@
 from rest_framework import serializers
-from ..immobilisations.models import Famille
-from .models import TypeEntretien, ModeleEntretien, EtapeEntretien
-
+from django.utils import timezone
+from ..immobilisations.models import Famille, Immobilisation
+from ..accounts.models import User
+from .models import (
+    Intervention,
+    ModeleEntretien,
+    TypeEntretien,
+    EtapeEntretien,
+)
 #serialiseur type entretien
 class TypeEntretienSerializer(serializers.ModelSerializer):
 
@@ -554,6 +560,356 @@ class EtapeEntretienSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "ordre":
                     "Une étape avec cet ordre existe déjà pour ce modèle d'entretien."
+            })
+
+        return attrs
+
+#serializer Intervention
+class InterventionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Intervention
+        fields = [
+            "id",
+            "entreprise",
+            "immobilisation",
+            "modele_entretien",
+            "type_entretien",
+            "demande_par",
+            "date_demande",
+            "date_prevue",
+            "date_debut",
+            "date_fin",
+            "priorite",
+            "motif",
+            "statut",
+        ]
+
+        read_only_fields = [
+            "id",
+            "entreprise",
+            "demande_par",
+            "date_demande",
+            "date_debut",
+            "date_fin",
+            "statut",
+        ]
+
+    def validate(self, attrs):
+        """
+        Validate the business rules of an Intervention.
+
+        The authenticated user's company is the source of truth
+        for company isolation.
+        """
+
+        request = self.context.get("request")
+
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError(
+                "Utilisateur authentifié requis."
+            )
+
+        user = request.user
+        entreprise = user.entreprise
+
+        if not entreprise:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        # -------------------------------------------------
+        # Values used for both CREATE and UPDATE
+        # -------------------------------------------------
+
+        immobilisation = attrs.get(
+            "immobilisation",
+            getattr(self.instance, "immobilisation", None)
+        )
+
+        type_entretien = attrs.get(
+            "type_entretien",
+            getattr(self.instance, "type_entretien", None)
+        )
+
+        modele_entretien = attrs.get(
+            "modele_entretien",
+            getattr(self.instance, "modele_entretien", None)
+        )
+
+        date_prevue = attrs.get(
+            "date_prevue",
+            getattr(self.instance, "date_prevue", None)
+        )
+# Le modèle d'entretien devient immuable
+# dès que l'intervention est planifiée.
+        if (
+            self.instance
+            and self.instance.statut != Intervention.Statut.BROUILLON
+            and "modele_entretien" in attrs
+        ):
+            nouveau_modele = attrs["modele_entretien"]
+            ancien_modele_id = self.instance.modele_entretien_id
+
+            nouveau_modele_id = (
+                nouveau_modele.id
+                if nouveau_modele is not None
+                else None
+            )
+
+            if nouveau_modele_id != ancien_modele_id:
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Le modèle d'entretien ne peut plus être modifié "
+                        "après la planification de l'intervention."
+                    )
+                })
+        # -------------------------------------------------
+        # IMMOBILISATION
+        # -------------------------------------------------
+
+        if immobilisation:
+
+            if immobilisation.entreprise_id != entreprise.id_entreprise:
+                raise serializers.ValidationError({
+                    "immobilisation": (
+                        "Cette immobilisation n'appartient pas "
+                        "à votre entreprise."
+                    )
+                })
+
+            # An immobilisation that has already been reformed
+            # or archived should not receive a new intervention.
+            if immobilisation.statut in [
+                Immobilisation.Statut.REFORMEE,
+                Immobilisation.Statut.ARCHIVEE,
+            ]:
+                raise serializers.ValidationError({
+                    "immobilisation": (
+                        "Une immobilisation réformée ou archivée "
+                        "ne peut pas recevoir une nouvelle intervention."
+                    )
+                })
+
+        # -------------------------------------------------
+        # TYPE ENTRETIEN
+        # -------------------------------------------------
+
+        if type_entretien:
+
+            if type_entretien.entreprise_id != entreprise.id_entreprise:
+                raise serializers.ValidationError({
+                    "type_entretien": (
+                        "Ce type d'entretien n'appartient pas "
+                        "à votre entreprise."
+                    )
+                })
+
+            if type_entretien.statut != TypeEntretien.Statut.ACTIF:
+                raise serializers.ValidationError({
+                    "type_entretien": (
+                        "Un type d'entretien archivé ne peut pas "
+                        "être utilisé pour une nouvelle intervention."
+                    )
+                })
+
+        # -------------------------------------------------
+        # MODELE ENTRETIEN
+        # -------------------------------------------------
+
+        if modele_entretien:
+
+            if modele_entretien.entreprise_id != entreprise.id_entreprise:
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Ce modèle d'entretien n'appartient pas "
+                        "à votre entreprise."
+                    )
+                })
+
+            if modele_entretien.statut != ModeleEntretien.Statut.ACTIF:
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Un modèle d'entretien archivé ne peut pas "
+                        "être utilisé pour une nouvelle intervention."
+                    )
+                })
+
+            # -------------------------------------------------
+            # MODEL ↔ IMMOBILISATION FAMILY
+            # -------------------------------------------------
+
+            if (
+                immobilisation
+                and modele_entretien.famille_id
+                != immobilisation.famille_id
+            ):
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Le modèle d'entretien doit appartenir "
+                        "à la même famille que l'immobilisation."
+                    )
+                })
+
+            # -------------------------------------------------
+            # MODEL ↔ TYPE ENTRETIEN
+            # -------------------------------------------------
+
+            if (
+                type_entretien
+                and modele_entretien.type_entretien_id
+                != type_entretien.id
+            ):
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Le modèle d'entretien doit correspondre "
+                        "au type d'entretien sélectionné."
+                    )
+                })
+
+        # -------------------------------------------------
+        # CORRECTIVE / DIRECT PATH
+        # -------------------------------------------------
+
+        if type_entretien:
+
+            is_correctif = (
+                type_entretien.code.upper() == "CORRECTIF"
+            )
+
+            if is_correctif and modele_entretien is not None:
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Une intervention corrective directe "
+                        "ne doit pas utiliser de modèle d'entretien."
+                    )
+                })
+
+            if not is_correctif and modele_entretien is None:
+                raise serializers.ValidationError({
+                    "modele_entretien": (
+                        "Un modèle d'entretien est requis pour "
+                        "une intervention non corrective."
+                    )
+                })
+
+        # -------------------------------------------------
+        # DATE PREVUE
+        # -------------------------------------------------
+        if date_prevue:
+
+            # During CREATE, date_demande does not exist yet
+            # because it is generated by auto_now_add.
+            #
+            # Therefore, today's date represents the future
+            # date_demande for the validation.
+            date_demande = getattr(
+                self.instance,
+                "date_demande",
+                None
+            )
+
+            if date_demande is None:
+                date_demande = timezone.localdate()
+
+            if date_prevue < date_demande:
+                raise serializers.ValidationError({
+                    "date_prevue": (
+                        "La date prévue ne peut pas être "
+                        "antérieure à la date de demande."
+                    )
+                })
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create an Intervention using the authenticated user's
+        company and identity.
+        """
+
+        request = self.context["request"]
+        user = request.user
+
+        validated_data["entreprise"] = user.entreprise
+        validated_data["demande_par"] = user
+
+        return Intervention.objects.create(
+            **validated_data
+        )
+#Intervention Statut
+class InterventionStatutSerializer(serializers.Serializer):
+    statut = serializers.ChoiceField(
+        choices=Intervention.Statut.choices
+    )
+
+    def validate(self, attrs):
+        intervention = self.context.get("intervention")
+
+        if not intervention:
+            raise serializers.ValidationError(
+                "Intervention requise."
+            )
+
+        nouveau_statut = attrs["statut"]
+        statut_actuel = intervention.statut
+
+        transitions_autorisees = {
+            Intervention.Statut.BROUILLON: {
+                Intervention.Statut.PLANIFIEE,
+                Intervention.Statut.ANNULEE,
+            },
+            Intervention.Statut.PLANIFIEE: {
+                Intervention.Statut.EN_COURS,
+                Intervention.Statut.ANNULEE,
+            },
+            Intervention.Statut.EN_COURS: {
+                Intervention.Statut.TERMINEE,
+            },
+            Intervention.Statut.TERMINEE: set(),
+            Intervention.Statut.ANNULEE: set(),
+        }
+
+        if nouveau_statut == statut_actuel:
+            raise serializers.ValidationError({
+                "statut": (
+                    "L'intervention est déjà dans ce statut."
+                )
+            })
+
+        if nouveau_statut not in transitions_autorisees.get(
+            statut_actuel, set()
+        ):
+            raise serializers.ValidationError({
+                "statut": (
+                    f"Transition impossible : "
+                    f"{statut_actuel} → {nouveau_statut}."
+                )
+            })
+
+        # PLANIFIEE requires a planned date.
+        if (
+            nouveau_statut == Intervention.Statut.PLANIFIEE
+            and intervention.date_prevue is None
+        ):
+            raise serializers.ValidationError({
+                "statut": (
+                    "Une date prévue est obligatoire "
+                    "pour planifier une intervention."
+                )
+            })
+        # Le modèle devient immuable dès que l'intervention est planifiée.
+        if (
+            self.instance
+            and self.instance.statut != Intervention.Statut.BROUILLON
+            and "modele_entretien" in attrs
+            and attrs["modele_entretien"] != self.instance.modele_entretien
+        ):
+            raise serializers.ValidationError({
+                "modele_entretien": (
+                    "Le modèle d'entretien ne peut plus être modifié "
+                    "après la planification de l'intervention."
+                )
             })
 
         return attrs

@@ -1,8 +1,10 @@
 from django.db import models
 
 from ..accounts.models import Entreprise
-from ..immobilisations.models import Famille
+from ..immobilisations.models import Famille, Immobilisation
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 #type entretien
 class TypeEntretien(models.Model):
 
@@ -201,3 +203,111 @@ class EtapeEntretien(models.Model):
 
     def __str__(self):
         return f"{self.ordre} - {self.libelle}"
+
+#Intervention
+class Intervention(models.Model):
+
+    class Priorite(models.TextChoices):
+        FAIBLE = "FAIBLE", "Faible"
+        NORMALE = "NORMALE", "Normale"
+        HAUTE = "HAUTE", "Haute"
+        URGENTE = "URGENTE", "Urgente"
+
+    class Statut(models.TextChoices):
+        BROUILLON = "BROUILLON", "Brouillon"
+        PLANIFIEE = "PLANIFIEE", "Planifiée"
+        EN_COURS = "EN_COURS", "En cours"
+        TERMINEE = "TERMINEE", "Terminée"
+        ANNULEE = "ANNULEE", "Annulée"
+
+    # =========================
+    # IDENTIFICATION
+    # =========================
+
+    id = models.BigAutoField(primary_key=True)
+
+    entreprise = models.ForeignKey(
+        Entreprise,
+        on_delete=models.PROTECT,
+        related_name="interventions"
+    )
+
+    immobilisation = models.ForeignKey(
+        Immobilisation,
+        on_delete=models.PROTECT,
+        related_name="interventions"
+    )
+
+    modele_entretien = models.ForeignKey(
+        ModeleEntretien,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="interventions"
+    )
+
+    type_entretien = models.ForeignKey(
+        TypeEntretien,
+        on_delete=models.PROTECT,
+        related_name="interventions"
+    )
+
+    demande_par = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="interventions_demandees"
+    )
+
+    # =========================
+    # DATES
+    # =========================
+
+    date_demande = models.DateField(
+        auto_now_add=True
+    )
+
+    date_prevue = models.DateField(
+        null=True,
+        blank=True
+    )
+
+    date_debut = models.DateField(
+        null=True,
+        blank=True
+    )
+
+    date_fin = models.DateField(
+        null=True,
+        blank=True
+    )
+
+    # =========================
+    # INFORMATIONS
+    # =========================
+
+    priorite = models.CharField(
+        max_length=10,
+        choices=Priorite.choices,
+        default=Priorite.NORMALE
+    )
+
+    motif = models.TextField(
+        blank=True
+    )
+
+    # =========================
+    # STATUT
+    # =========================
+
+    statut = models.CharField(
+        max_length=10,
+        choices=Statut.choices,
+        default=Statut.BROUILLON
+    )
+
+    class Meta:
+        db_table = "intervention"
+        ordering = ["-date_demande", "-id"]
+
+    def __str__(self):
+        return f"Intervention #{self.id} - {self.immobilisation}"
