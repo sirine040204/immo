@@ -16,6 +16,7 @@ from .models import (TypeEntretien,
     EtapeEntretien,
     Intervention,
     SuiviEtapeIntervention,
+    RapportIntervention,
     )
 from .serializers import (TypeEntretienSerializer,
     ModeleEntretienSerializer, 
@@ -23,6 +24,7 @@ from .serializers import (TypeEntretienSerializer,
     InterventionSerializer,
     InterventionStatutSerializer,
     SuiviEtapeInterventionSerializer,
+    RapportInterventionSerializer,
     )
 
 #type entretien views
@@ -757,3 +759,100 @@ class SuiviEtapeInterventionDetailView(
                 "validee_par",
             )
         )
+# RapportIntervention
+# GET  /api/v1/maintenance/rapports-interventions/
+# POST /api/v1/maintenance/rapports-interventions/
+
+class RapportInterventionListCreateView(
+    generics.ListCreateAPIView
+):
+    serializer_class = RapportInterventionSerializer
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "RAPPORT_INTERVENTION_CONSULTER",
+        "POST": "RAPPORT_INTERVENTION_CREER",
+    }
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return RapportIntervention.objects.none()
+
+        return (
+            RapportIntervention.objects
+            .filter(
+                intervention__entreprise=user.entreprise
+            )
+            .select_related(
+                "intervention",
+                "intervention__immobilisation",
+                "intervention__type_entretien",
+                "intervention__modele_entretien",
+                "redige_par",
+            )
+        )
+
+# GET    /api/v1/maintenance/rapports-interventions/{id}/
+# PATCH  /api/v1/maintenance/rapports-interventions/{id}/
+# DELETE /api/v1/maintenance/rapports-interventions/{id}/
+
+class RapportInterventionDetailView(
+    generics.RetrieveUpdateDestroyAPIView
+):
+    serializer_class = RapportInterventionSerializer
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "RAPPORT_INTERVENTION_CONSULTER",
+        "PATCH": "RAPPORT_INTERVENTION_MODIFIER",
+        "DELETE": "RAPPORT_INTERVENTION_SUPPRIMER",
+    }
+
+    http_method_names = [
+        "get",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return RapportIntervention.objects.none()
+
+        return (
+            RapportIntervention.objects
+            .filter(
+                intervention__entreprise=user.entreprise
+            )
+            .select_related(
+                "intervention",
+                "intervention__immobilisation",
+                "intervention__type_entretien",
+                "intervention__modele_entretien",
+                "redige_par",
+            )
+        )
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+
+        if not user.is_company_admin:
+            raise ValidationError({
+                "detail": (
+                    "Seul un administrateur de l'entreprise "
+                    "peut supprimer un rapport d'intervention."
+                )
+            })
+
+        instance.delete()

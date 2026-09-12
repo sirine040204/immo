@@ -8,6 +8,7 @@ from .models import (
     TypeEntretien,
     EtapeEntretien,
     SuiviEtapeIntervention,
+    RapportIntervention,
 )
 #serialiseur type entretien
 class TypeEntretienSerializer(serializers.ModelSerializer):
@@ -1100,3 +1101,135 @@ class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+#Rapport Intervention
+class RapportInterventionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = RapportIntervention
+        fields = [
+            "id",
+            "intervention",
+            "observations",
+            "travaux_realises",
+            "recommandations",
+            "date_rapport",
+            "redige_par",
+        ]
+
+        read_only_fields = [
+            "id",
+            "date_rapport",
+            "redige_par",
+        ]
+
+    def validate(self, attrs):
+        """
+        Validate the business rules of a final intervention report.
+        """
+
+        request = self.context.get("request")
+
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError(
+                "Utilisateur authentifié requis."
+            )
+
+        user = request.user
+        entreprise = user.entreprise
+
+        if not entreprise:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        # -------------------------------------------------
+        # INTERVENTION
+        # -------------------------------------------------
+
+        intervention = attrs.get(
+            "intervention",
+            getattr(self.instance, "intervention", None),
+        )
+
+        if not intervention:
+            raise serializers.ValidationError({
+                "intervention": "Intervention requise."
+            })
+
+        # -------------------------------------------------
+        # COMPANY ISOLATION
+        # -------------------------------------------------
+
+        if intervention.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Cette intervention n'appartient pas "
+                    "à votre entreprise."
+                )
+            })
+
+        # -------------------------------------------------
+        # ONLY COMPLETED INTERVENTIONS
+        # -------------------------------------------------
+
+        if intervention.statut != Intervention.Statut.TERMINEE:
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Un rapport final peut être créé uniquement "
+                    "pour une intervention terminée."
+                )
+            })
+
+        # -------------------------------------------------
+        # ALL REQUIRED STEPS MUST BE VALIDATED
+        # -------------------------------------------------
+
+        etapes_obligatoires_non_validees = (
+            intervention.suivis_etapes
+            .filter(obligatoire=True)
+            .exclude(
+                statut=SuiviEtapeIntervention.Statut.VALIDEE
+            )
+            .exists()
+        )
+
+        if etapes_obligatoires_non_validees:
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Toutes les étapes obligatoires doivent être "
+                    "validées avant de créer le rapport final."
+                )
+            })
+
+        # -------------------------------------------------
+        # ONE REPORT PER INTERVENTION
+        # -------------------------------------------------
+
+        if (
+            self.instance is None
+            and RapportIntervention.objects.filter(
+                intervention=intervention
+            ).exists()
+        ):
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Cette intervention possède déjà un rapport final."
+                )
+            })
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create the report using the authenticated user.
+        """
+
+        request = self.context["request"]
+        user = request.user
+
+        validated_data["redige_par"] = user
+
+        return RapportIntervention.objects.create(
+            **validated_data
+        )

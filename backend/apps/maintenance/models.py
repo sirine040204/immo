@@ -386,3 +386,47 @@ class SuiviEtapeIntervention(models.Model):
             f"{self.intervention} - "
             f"Étape {self.ordre}: {self.libelle}"
         )
+#Rapport Intervention
+class RapportIntervention(models.Model):
+    """
+    Rapport final d'une intervention.
+
+    Une intervention possède au maximum un seul rapport.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+
+    intervention = models.OneToOneField(
+        Intervention,
+        on_delete=models.PROTECT,
+        related_name="rapport",
+    )
+
+    observations = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    travaux_realises = models.TextField()
+
+    recommandations = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    date_rapport = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    redige_par = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="rapports_interventions",
+    )
+
+    class Meta:
+        db_table = "rapport_intervention"
+        ordering = ["-date_rapport", "-id"]
+
+    def __str__(self):
+        return f"Rapport de l'intervention #{self.intervention.id}"
