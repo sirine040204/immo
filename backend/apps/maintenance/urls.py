@@ -19,6 +19,8 @@ from .views import (
     InterventionListCreateView,
     InterventionDetailView,
     InterventionStatutView,
+    SuiviEtapeInterventionListCreateView,
+    SuiviEtapeInterventionDetailView,
 )
 
 
@@ -122,5 +124,17 @@ urlpatterns = [
         "interventions/<int:pk>/statut/",
         InterventionStatutView.as_view(),
         name="intervention-statut",
+    ),
+        # suivi etape intervention urls
+    path(
+        "suivis-etapes/",
+        SuiviEtapeInterventionListCreateView.as_view(),
+        name="suivi-etape-intervention-list-create",
+    ),
+
+    path(
+        "suivis-etapes/<int:pk>/",
+        SuiviEtapeInterventionDetailView.as_view(),
+        name="suivi-etape-intervention-detail",
     ),
 ]

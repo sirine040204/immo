@@ -7,6 +7,7 @@ from .models import (
     ModeleEntretien,
     TypeEntretien,
     EtapeEntretien,
+    SuiviEtapeIntervention,
 )
 #serialiseur type entretien
 class TypeEntretienSerializer(serializers.ModelSerializer):
@@ -913,3 +914,189 @@ class InterventionStatutSerializer(serializers.Serializer):
             })
 
         return attrs
+
+#Suivi Etape Intervention
+class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SuiviEtapeIntervention
+        fields = [
+            "id",
+            "intervention",
+            "etape_entretien",
+            "libelle",
+            "description",
+            "ordre",
+            "obligatoire",
+            "statut",
+            "commentaire",
+            "date_validation",
+            "validee_par",
+        ]
+
+        read_only_fields = [
+            "id",
+            "etape_entretien",
+            "date_validation",
+            "validee_par",
+        ]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError(
+                "Utilisateur authentifié requis."
+            )
+
+        user = request.user
+        entreprise = user.entreprise
+
+        if not entreprise:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        intervention = attrs.get(
+            "intervention",
+            getattr(self.instance, "intervention", None),
+        )
+
+        if not intervention:
+            raise serializers.ValidationError({
+                "intervention": "Intervention requise."
+            })
+
+        # Company isolation
+        if intervention.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Cette intervention n'appartient pas à votre entreprise."
+                )
+            })
+
+        # Historical interventions cannot be modified
+        if intervention.statut in [
+            Intervention.Statut.TERMINEE,
+            Intervention.Statut.ANNULEE,
+        ]:
+            raise serializers.ValidationError({
+                "intervention": (
+                    "Impossible de modifier les étapes d'une intervention "
+                    "terminée ou annulée."
+                )
+            })
+
+        # Direct creation is only for corrective interventions
+        if self.instance is None:
+            if intervention.modele_entretien_id is not None:
+                raise serializers.ValidationError({
+                    "intervention": (
+                        "Les étapes d'une intervention basée sur un modèle "
+                        "sont générées automatiquement lors de la "
+                        "planification."
+                    )
+                })
+
+            if intervention.type_entretien.code.upper() != "CORRECTIF":
+                raise serializers.ValidationError({
+                    "intervention": (
+                        "Les étapes directes sont réservées aux "
+                        "interventions correctives."
+                    )
+                })
+
+        # The public endpoint must not reference a model step
+        if (
+            self.instance is None
+            and attrs.get("etape_entretien") is not None
+        ):
+            raise serializers.ValidationError({
+                "etape_entretien": (
+                    "Une étape corrective directe ne doit pas référencer "
+                    "une étape de modèle."
+                )
+            })
+
+        statut = attrs.get(
+            "statut",
+            getattr(
+                self.instance,
+                "statut",
+                SuiviEtapeIntervention.Statut.A_VALIDER,
+            ),
+        )
+
+        commentaire = attrs.get(
+            "commentaire",
+            getattr(self.instance, "commentaire", ""),
+        )
+
+        # A comment is required for NON_VALIDEE
+        if (
+            statut == SuiviEtapeIntervention.Statut.NON_VALIDEE
+            and not commentaire.strip()
+        ):
+            raise serializers.ValidationError({
+                "commentaire": (
+                    "Un commentaire est obligatoire lorsqu'une étape "
+                    "n'est pas validée."
+                )
+            })
+
+        # Snapshot fields cannot be modified after creation
+        if self.instance is not None:
+            protected_errors = {}
+
+            for field in [
+                "libelle",
+                "description",
+                "ordre",
+                "obligatoire",
+            ]:
+                if (
+                    field in attrs
+                    and attrs[field] != getattr(self.instance, field)
+                ):
+                    protected_errors[field] = (
+                        "Ce champ ne peut pas être modifié après "
+                        "la création du suivi."
+                    )
+
+            if protected_errors:
+                raise serializers.ValidationError(protected_errors)
+
+        return attrs
+
+    def create(self, validated_data):
+        # The intervention now comes directly from the request body
+        validated_data["etape_entretien"] = None
+
+        return SuiviEtapeIntervention.objects.create(
+            **validated_data
+        )
+
+    def update(self, instance, validated_data):
+        nouveau_statut = validated_data.get(
+            "statut",
+            instance.statut,
+        )
+
+        instance.statut = nouveau_statut
+
+        if "commentaire" in validated_data:
+            instance.commentaire = validated_data["commentaire"]
+
+        if nouveau_statut in [
+            SuiviEtapeIntervention.Statut.VALIDEE,
+            SuiviEtapeIntervention.Statut.NON_VALIDEE,
+        ]:
+            instance.date_validation = timezone.now()
+            instance.validee_par = self.context["request"].user
+
+        elif nouveau_statut == SuiviEtapeIntervention.Statut.A_VALIDER:
+            instance.date_validation = None
+            instance.validee_par = None
+
+        instance.save()
+
+        return instance

@@ -311,3 +311,78 @@ class Intervention(models.Model):
 
     def __str__(self):
         return f"Intervention #{self.id} - {self.immobilisation}"
+
+#Suivi Etape Intervention
+class SuiviEtapeIntervention(models.Model):
+    class Statut(models.TextChoices):
+        A_VALIDER = "A_VALIDER", "À valider"
+        VALIDEE = "VALIDEE", "Validée"
+        NON_VALIDEE = "NON_VALIDEE", "Non validée"
+
+    id = models.BigAutoField(primary_key=True)
+
+    intervention = models.ForeignKey(
+        Intervention,
+        on_delete=models.PROTECT,
+        related_name="suivis_etapes",
+    )
+
+    etape_entretien = models.ForeignKey(
+        EtapeEntretien,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="suivis_interventions",
+    )
+
+    # Snapshot of EtapeEntretien or direct corrective-step data
+    libelle = models.CharField(max_length=255)
+
+    description = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    ordre = models.PositiveIntegerField()
+
+    obligatoire = models.BooleanField(default=False)
+
+    statut = models.CharField(
+        max_length=12,
+        choices=Statut.choices,
+        default=Statut.A_VALIDER,
+    )
+
+    commentaire = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    date_validation = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    validee_par = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="suivis_etapes_valides",
+    )
+
+    class Meta:
+        db_table = "suivi_etape_intervention"
+        ordering = ["ordre", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["intervention", "ordre"],
+                name="unique_suivi_ordre_par_intervention",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.intervention} - "
+            f"Étape {self.ordre}: {self.libelle}"
+        )

@@ -1,3 +1,4 @@
+from django.http import request
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -5,18 +6,23 @@ from django.utils import timezone
 from django.db.models import ProtectedError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics, serializers
+from rest_framework.exceptions import ValidationError
 from ..accounts.permissions import HasPermission
+from django.db import transaction
+from .services import generer_suivis_depuis_modele
 
 from .models import (TypeEntretien,
     ModeleEntretien,
     EtapeEntretien,
     Intervention,
+    SuiviEtapeIntervention,
     )
 from .serializers import (TypeEntretienSerializer,
     ModeleEntretienSerializer, 
     EtapeEntretienSerializer,
     InterventionSerializer,
     InterventionStatutSerializer,
+    SuiviEtapeInterventionSerializer,
     )
 
 #type entretien views
@@ -533,9 +539,9 @@ class InterventionListCreateView(generics.ListCreateAPIView):
             )
         )
 
-#GET   /api/v1/maintenance/interventions/{id}/
-#PATCH /api/v1/maintenance/interventions/{id}/
-#DELETE /api/v1/maintenance/interventions/{id}/
+# GET   /api/v1/maintenance/interventions/{id}/
+# PATCH /api/v1/maintenance/interventions/{id}/
+# DELETE /api/v1/maintenance/interventions/{id}/
 class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = InterventionSerializer
     permission_classes = [IsAuthenticated, HasPermission]
@@ -547,7 +553,13 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
     }
 
     # We deliberately expose PATCH, not PUT.
-    http_method_names = ["get", "patch", "delete", "head", "options"]
+    http_method_names = [
+        "get",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
 
     def get_queryset(self):
         user = self.request.user
@@ -566,6 +578,31 @@ class InterventionDetailView(generics.RetrieveUpdateDestroyAPIView):
                 "demande_par",
             )
         )
+
+    def perform_destroy(self, instance):
+        """
+        Une intervention peut être supprimée uniquement si :
+        - elle est encore BROUILLON ;
+        - elle ne possède aucun suivi d'étape.
+        """
+
+        if instance.statut != Intervention.Statut.BROUILLON:
+            raise ValidationError({
+                "detail": (
+                    "Seules les interventions au statut BROUILLON "
+                    "peuvent être supprimées."
+                )
+            })
+
+        if instance.suivis_etapes.exists():
+            raise ValidationError({
+                "detail": (
+                    "Cette intervention ne peut pas être supprimée "
+                    "car elle possède un historique de suivi."
+                )
+            })
+
+        instance.delete()
 
 #PATCH /api/v1/maintenance/interventions/{id}/statut/
 class InterventionStatutView(generics.GenericAPIView):
@@ -589,6 +626,7 @@ class InterventionStatutView(generics.GenericAPIView):
             .filter(entreprise=user.entreprise)
         )
 
+    @transaction.atomic
     def patch(self, request, *args, **kwargs):
         intervention = self.get_object()
 
@@ -603,6 +641,7 @@ class InterventionStatutView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         nouveau_statut = serializer.validated_data["statut"]
+        ancien_statut = intervention.statut
 
         today = timezone.localdate()
 
@@ -622,6 +661,14 @@ class InterventionStatutView(generics.GenericAPIView):
             ]
         )
 
+        # Generate model-based steps only when planning for the first time
+        if (
+            ancien_statut == Intervention.Statut.BROUILLON
+            and nouveau_statut == Intervention.Statut.PLANIFIEE
+            and intervention.modele_entretien_id is not None
+        ):
+            generer_suivis_depuis_modele(intervention)
+
         return Response(
             InterventionSerializer(
                 intervention,
@@ -629,3 +676,84 @@ class InterventionStatutView(generics.GenericAPIView):
             ).data
         )
 
+# SuiviEtapeIntervention
+# GET  /api/v1/maintenance/suivis-etapes/
+# POST /api/v1/maintenance/suivis-etapes/
+class SuiviEtapeInterventionListCreateView(generics.ListCreateAPIView):
+    serializer_class = SuiviEtapeInterventionSerializer
+    permission_classes = [IsAuthenticated, HasPermission]
+
+    required_permission = {
+        "GET": "SUIVI_ETAPE_INTERVENTION_CONSULTER",
+        "POST": "SUIVI_ETAPE_INTERVENTION_AJOUTER",
+    }
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return SuiviEtapeIntervention.objects.none()
+
+        queryset = (
+            SuiviEtapeIntervention.objects
+            .filter(
+                intervention__entreprise=user.entreprise
+            )
+            .select_related(
+                "intervention",
+                "etape_entretien",
+                "validee_par",
+            )
+        )
+
+        intervention_id = self.request.query_params.get("intervention")
+
+        if intervention_id:
+            queryset = queryset.filter(
+                intervention_id=intervention_id
+            )
+
+        return queryset
+# GET    /api/v1/maintenance/suivis-etapes/{id}/
+# PATCH  /api/v1/maintenance/suivis-etapes/{id}/
+# DELETE /api/v1/maintenance/suivis-etapes/{id}/
+class SuiviEtapeInterventionDetailView(
+    generics.RetrieveUpdateDestroyAPIView
+):
+    serializer_class = SuiviEtapeInterventionSerializer
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "SUIVI_ETAPE_INTERVENTION_CONSULTER",
+        "PATCH": "SUIVI_ETAPE_INTERVENTION_MODIFIER",
+        "DELETE": "SUIVI_ETAPE_INTERVENTION_SUPPRIMER",
+    }
+
+    http_method_names = [
+        "get",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user.entreprise:
+            return SuiviEtapeIntervention.objects.none()
+
+        return (
+            SuiviEtapeIntervention.objects
+            .filter(
+                intervention__entreprise=user.entreprise
+            )
+            .select_related(
+                "intervention",
+                "etape_entretien",
+                "validee_par",
+            )
+        )
