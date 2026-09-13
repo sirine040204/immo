@@ -2,6 +2,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from django.shortcuts import get_object_or_404
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+
+from .models import Document
+from .serializers import DocumentSerializer
 
 from ..accounts.permissions import HasPermission
 
@@ -331,4 +336,445 @@ class TypeDocumentRestoreView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+#DOCUMENTS
+
+#GET /api/v1/documents/
+#POST /api/v1/documents/
+class DocumentListCreateView(APIView):
+    """
+    GET:
+        List all documents belonging to the authenticated user's enterprise.
+
+    POST:
+        Create a document for the authenticated user's enterprise.
+    """
+
+    parser_classes = [
+        JSONParser,
+        MultiPartParser,
+        FormParser
+    ]
+
+    permission_classes = [HasPermission]
+
+    required_permission = {
+        "GET": "DOCUMENT_CONSULTER",
+        "POST": "DOCUMENT_AJOUTER",
+    }
+
+    def get(self, request):
+        """
+        Return all documents of the authenticated user's enterprise.
+
+        Optional filters:
+        - type_document
+        - immobilisation
+        - statut
+        """
+
+        entreprise = request.user.entreprise
+
+        queryset = (
+            Document.objects
+            .filter(entreprise=entreprise)
+            .select_related(
+                "entreprise",
+                "immobilisation",
+                "type_document",
+                "ajoute_par"
+            )
+            .order_by("-date_ajout")
+        )
+
+        # Filter by type document
+        type_document_id = request.query_params.get("type_document")
+
+        if type_document_id:
+            queryset = queryset.filter(
+                type_document_id=type_document_id
+            )
+
+        # Filter by immobilisation
+        immobilisation_id = request.query_params.get("immobilisation")
+
+        if immobilisation_id:
+            queryset = queryset.filter(
+                immobilisation_id=immobilisation_id
+            )
+
+        # Filter by status
+        statut = request.query_params.get("statut")
+
+        if statut:
+            queryset = queryset.filter(
+                statut=statut
+            )
+
+        serializer = DocumentSerializer(
+            queryset,
+            many=True,
+            context={
+                "request": request
+            }
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    def post(self, request):
+        """
+        Create a document.
+
+        The enterprise and creator are automatically taken
+        from the authenticated user inside the serializer.
+        """
+
+        serializer = DocumentSerializer(
+            data=request.data,
+            context={
+                "request": request
+            }
+        )
+
+        if serializer.is_valid():
+            document = serializer.save()
+
+            return Response(
+                DocumentSerializer(
+                    document,
+                    context={
+                        "request": request
+                    }
+                ).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+#GET /api/v1/documents/<int:document_id>/
+#PUT /api/v1/documents/<int:document_id>/
+#PATCH /api/v1/documents/<int:document_id>/
+#DELETE /api/v1/documents/<int:document_id>/
+class DocumentDetailView(APIView):
+    """
+    GET:
+        Retrieve one document.
+
+    PUT:
+        Completely update one document.
+
+    PATCH:
+        Partially update one document.
+
+    DELETE:
+        Permanently delete one document.
+    """
+
+    parser_classes = [
+        JSONParser,
+        MultiPartParser,
+        FormParser
+    ]
+
+    permission_classes = [HasPermission]
+
+    required_permission = {
+        "GET": "DOCUMENT_CONSULTER",
+        "PUT": "DOCUMENT_MODIFIER",
+        "PATCH": "DOCUMENT_MODIFIER",
+        "DELETE": "DOCUMENT_SUPPRIMER",
+    }
+
+    def get_document(self, request, document_id):
+        """
+        Retrieve a document only if it belongs to
+        the authenticated user's enterprise.
+
+        This prevents one enterprise from accessing
+        another enterprise's documents.
+        """
+
+        return get_object_or_404(
+            Document.objects.select_related(
+                "entreprise",
+                "immobilisation",
+                "type_document",
+                "ajoute_par"
+            ),
+            id=document_id,
+            entreprise=request.user.entreprise
+        )
+
+    def get(self, request, document_id):
+        document = self.get_document(
+            request,
+            document_id
+        )
+
+        serializer = DocumentSerializer(
+            document,
+            context={
+                "request": request
+            }
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+    def put(self, request, document_id):
+        """
+        Complete update.
+
+        PUT requires all mandatory fields.
+        """
+
+        document = self.get_document(
+            request,
+            document_id
+        )
+
+        old_file_name = None
+
+        if document.fichier:
+            old_file_name = document.fichier.name
+
+        serializer = DocumentSerializer(
+            document,
+            data=request.data,
+            context={
+                "request": request
+            }
+        )
+
+        if serializer.is_valid():
+            updated_document = serializer.save()
+
+            self.delete_old_file_if_replaced(
+                updated_document,
+                old_file_name
+            )
+
+            return Response(
+                DocumentSerializer(
+                    updated_document,
+                    context={
+                        "request": request
+                    }
+                ).data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def patch(self, request, document_id):
+        """
+        Partial update.
+
+        PATCH allows updating only some fields.
+        """
+
+        document = self.get_document(
+            request,
+            document_id
+        )
+
+        old_file_name = None
+
+        if document.fichier:
+            old_file_name = document.fichier.name
+
+        serializer = DocumentSerializer(
+            document,
+            data=request.data,
+            partial=True,
+            context={
+                "request": request
+            }
+        )
+
+        if serializer.is_valid():
+            updated_document = serializer.save()
+
+            self.delete_old_file_if_replaced(
+                updated_document,
+                old_file_name
+            )
+
+            return Response(
+                DocumentSerializer(
+                    updated_document,
+                    context={
+                        "request": request
+                    }
+                ).data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def delete(self, request, document_id):
+        """
+        Permanently delete a document.
+        """
+
+        document = self.get_document(
+            request,
+            document_id
+        )
+
+        file_name = None
+
+        if document.fichier:
+            file_name = document.fichier.name
+
+        document.delete()
+
+        if file_name:
+            from django.core.files.storage import default_storage
+
+            if default_storage.exists(file_name):
+                default_storage.delete(file_name)
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+    @staticmethod
+    def delete_old_file_if_replaced(
+        document,
+        old_file_name
+    ):
+        """
+        Delete the old physical file only when
+        a new file has replaced it.
+        """
+
+        if not old_file_name:
+            return
+
+        if not document.fichier:
+            return
+
+        new_file_name = document.fichier.name
+
+        if old_file_name == new_file_name:
+            return
+
+        from django.core.files.storage import default_storage
+
+        if default_storage.exists(old_file_name):
+            default_storage.delete(old_file_name)
+
+#POST /api/v1/documents/<int:document_id>/archive/
+class DocumentArchiveView(APIView):
+    """
+    Archive an active document.
+
+    The document is not deleted.
+    Its status becomes ARCHIVE.
+    """
+
+    permission_classes = [HasPermission]
+
+    required_permission = {
+        "POST": "DOCUMENT_ARCHIVER",
+    }
+
+    def post(self, request, document_id):
+        document = get_object_or_404(
+            Document,
+            id=document_id,
+            entreprise=request.user.entreprise
+        )
+
+        if document.statut == Document.Statut.ARCHIVE:
+            return Response(
+                {
+                    "message": "Ce document est déjà archivé."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        document.statut = Document.Statut.ARCHIVE
+        document.save(
+            update_fields=["statut"]
+        )
+
+        serializer = DocumentSerializer(
+            document,
+            context={
+                "request": request
+            }
+        )
+
+        return Response(
+            {
+                "message": "Document archivé avec succès.",
+                "document": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+#POST /api/v1/documents/<int:document_id>/restore/
+class DocumentRestoreView(APIView):
+    """
+    Restore an archived document.
+
+    Its status becomes ACTIF.
+    """
+
+    permission_classes = [HasPermission]
+
+    required_permission = {
+        "POST": "DOCUMENT_RESTAURER",
+    }
+
+    def post(self, request, document_id):
+        document = get_object_or_404(
+            Document,
+            id=document_id,
+            entreprise=request.user.entreprise
+        )
+
+        if document.statut == Document.Statut.ACTIF:
+            return Response(
+                {
+                    "message": "Ce document est déjà actif."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        document.statut = Document.Statut.ACTIF
+        document.save(
+            update_fields=["statut"]
+        )
+
+        serializer = DocumentSerializer(
+            document,
+            context={
+                "request": request
+            }
+        )
+
+        return Response(
+            {
+                "message": "Document restauré avec succès.",
+                "document": serializer.data
+            },
+            status=status.HTTP_200_OK
         )
