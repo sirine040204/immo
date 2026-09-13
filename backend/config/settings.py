@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     "apps.immobilisations",
     "apps.maintenance",
+    "apps.documents",
 ]
 
 AUTH_USER_MODEL = 'accounts.User'

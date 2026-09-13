@@ -28,4 +28,8 @@ urlpatterns = [
     "api/v1/maintenance/",
     include("apps.maintenance.urls"),
 ),
+    path(
+    "api/v1/documents/",
+    include("apps.documents.urls"),
+),
 ]
