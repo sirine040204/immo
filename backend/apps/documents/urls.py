@@ -9,6 +9,10 @@ from .views import (
     DocumentDetailView,
     DocumentArchiveView,
     DocumentRestoreView,
+    TypeDocumentFamilleListCreateView,
+    TypeDocumentFamilleDetailView,
+    DocumentDownloadView,
+    DocumentExpirationView,
 )
 
 
@@ -61,4 +65,29 @@ urlpatterns = [
         DocumentRestoreView.as_view(),
         name="document-restore"
     ),
+    # type document famille
+
+    path(
+        "types-familles/",
+        TypeDocumentFamilleListCreateView.as_view(),
+        name="type-document-famille-list-create",
+    ),
+
+    path(
+        "types-familles/<int:type_document_famille_id>/",
+        TypeDocumentFamilleDetailView.as_view(),
+        name="type-document-famille-detail",
+    ),
+    # document download
+    path(
+        "<int:id>/download/",
+        DocumentDownloadView.as_view(),
+        name="document-download",
+    ),
+    # document expiration
+    path(
+    "expiration/",
+    DocumentExpirationView.as_view(),
+    name="document-expiration",
+),
 ]

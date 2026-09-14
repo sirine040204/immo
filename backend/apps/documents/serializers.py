@@ -1,11 +1,12 @@
 from rest_framework import serializers
 from django.utils import timezone
-from ..immobilisations.models import Immobilisation
+from ..immobilisations.models import Immobilisation, Famille
 
 
 from .models import (
     Document,
     TypeDocument,
+    TypeDocumentFamille,
 )
 #type documnet serializer
 class TypeDocumentSerializer(serializers.ModelSerializer):
@@ -384,7 +385,24 @@ class DocumentSerializer(serializers.ModelSerializer):
                     "supérieure ou égale à la date de début."
                 )
             })
+        # ========================================================
+        # COHÉRENCE TYPE DOCUMENT / FAMILLE IMMOBILISATION
+        # ========================================================
 
+        if immobilisation is not None:
+
+            relation_existe = TypeDocumentFamille.objects.filter(
+                type_document=type_document,
+                famille=immobilisation.famille,
+            ).exists()
+
+            if not relation_existe:
+                raise serializers.ValidationError({
+                    "type_document": (
+                        "Ce type de document n'est pas configuré "
+                        "pour la famille de cette immobilisation."
+                    )
+                })
         # ========================================================
         # RÈGLE D'ÉCHÉANCE DU TYPE DE DOCUMENT
         # ========================================================
@@ -424,3 +442,173 @@ class DocumentSerializer(serializers.ModelSerializer):
         validated_data["statut"] = Document.Statut.ACTIF
 
         return super().create(validated_data)
+
+#TypeDocumentFamille
+class TypeDocumentFamilleSerializer(serializers.ModelSerializer):
+
+    type_document_nom = serializers.CharField(
+        source="type_document.nom",
+        read_only=True,
+    )
+
+    famille_nom = serializers.CharField(
+        source="famille.nom",
+        read_only=True,
+    )
+
+    class Meta:
+        model = TypeDocumentFamille
+
+        fields = [
+            "id_type_document_famille",
+            "type_document",
+            "type_document_nom",
+            "famille",
+            "famille_nom",
+            "obligatoire",
+        ]
+
+        read_only_fields = [
+            "id_type_document_famille",
+            "type_document_nom",
+            "famille_nom",
+        ]
+
+    def validate(self, attrs):
+
+        request = self.context.get("request")
+
+        if request is None:
+            raise serializers.ValidationError(
+                "Contexte de requête manquant."
+            )
+
+        if not request.user.is_authenticated:
+            raise serializers.ValidationError(
+                "Utilisateur non authentifié."
+            )
+
+        entreprise = getattr(
+            request.user,
+            "entreprise",
+            None,
+        )
+
+        if entreprise is None:
+            raise serializers.ValidationError(
+                "L'utilisateur n'est associé à aucune entreprise."
+            )
+
+        type_document = attrs.get(
+            "type_document",
+            getattr(
+                self.instance,
+                "type_document",
+                None,
+            ),
+        )
+
+        famille = attrs.get(
+            "famille",
+            getattr(
+                self.instance,
+                "famille",
+                None,
+            ),
+        )
+
+        # =========================
+        # TYPE DOCUMENT
+        # =========================
+
+        if type_document is None:
+            raise serializers.ValidationError({
+                "type_document": (
+                    "Le type de document est obligatoire."
+                )
+            })
+
+        if type_document.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "type_document": (
+                    "Ce type de document n'appartient pas "
+                    "à votre entreprise."
+                )
+            })
+
+        if type_document.statut != TypeDocument.Statut.ACTIF:
+            raise serializers.ValidationError({
+                "type_document": (
+                    "Un type de document archivé ne peut pas "
+                    "être associé à une famille."
+                )
+            })
+
+        # =========================
+        # FAMILLE
+        # =========================
+
+        if famille is None:
+            raise serializers.ValidationError({
+                "famille": (
+                    "La famille est obligatoire."
+                )
+            })
+
+        if famille.entreprise_id != entreprise.id_entreprise:
+            raise serializers.ValidationError({
+                "famille": (
+                    "Cette famille n'appartient pas "
+                    "à votre entreprise."
+                )
+            })
+
+        if famille.statut != Famille.Statut.ACTIVE:
+            raise serializers.ValidationError({
+                "famille": (
+                    "Une famille archivée ne peut pas "
+                    "être associée à un type de document."
+                )
+            })
+
+        # =========================
+        # DUPLICATE RELATIONSHIP
+        # =========================
+
+        queryset = TypeDocumentFamille.objects.filter(
+            type_document=type_document,
+            famille=famille,
+        )
+
+        if self.instance is not None:
+            queryset = queryset.exclude(
+                pk=self.instance.pk
+            )
+
+        if queryset.exists():
+            raise serializers.ValidationError({
+                "non_field_errors": (
+                    "Ce type de document est déjà associé "
+                    "à cette famille."
+                )
+            })
+
+        return attrs
+# document expiration
+class DocumentExpirationSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField()
+
+    nom = serializers.CharField()
+
+    type_document = serializers.IntegerField()
+
+    date_fin_validite = serializers.DateField(
+        allow_null=True
+    )
+
+    statut_validite = serializers.CharField()
+
+    jours_restants = serializers.IntegerField(
+        allow_null=True
+    )

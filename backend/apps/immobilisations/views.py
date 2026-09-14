@@ -1,13 +1,13 @@
 from rest_framework import status
-from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
-from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
+from collections import defaultdict
+from django.conf import settings
 from ..accounts.permissions import HasPermission
+
 from .models import (
     Famille,
     AttributDynamique,
@@ -16,6 +16,13 @@ from .models import (
     ValeurAttribut,
     ReleveUsage,
 )
+
+from ..documents.models import (
+    Document,
+    TypeDocument,
+    TypeDocumentFamille,
+)
+
 from .serializers import (
     FamilleSerializer,
     FamilleArchiveSerializer,
@@ -26,6 +33,7 @@ from .serializers import (
     ValeurAttributSerializer,
     ReleveUsageSerializer,
     ReformerImmobilisationSerializer,
+    DocumentRequisSerializer,
 )
 
 #famille
@@ -1763,6 +1771,171 @@ class ResetTestImmobilisationView(APIView):
                 "detail": "Immobilisation de test réinitialisée.",
                 "immobilisation_id": immobilisation.id_immobilisation,
                 "statut": immobilisation.statut,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+#
+# GET /api/v1/immobilisations/immobilisations/<id_immobilisation>/documents-requis/
+class ImmobilisationDocumentsRequisView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "GET": "IMMOBILISATION_CONSULTER",
+    }
+
+    def get(self, request, id_immobilisation):
+
+        entreprise = request.user.entreprise
+
+        # ============================================================
+        # 1. RÉCUPÉRER L'IMMOBILISATION
+        # ============================================================
+
+        try:
+            immobilisation = (
+                Immobilisation.objects
+                .select_related("famille")
+                .get(
+                    id_immobilisation=id_immobilisation,
+                    entreprise=entreprise,
+                )
+            )
+
+        except Immobilisation.DoesNotExist:
+
+            return Response(
+                {
+                    "detail": (
+                        "Cette immobilisation n'existe pas "
+                        "ou n'appartient pas à votre entreprise."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ============================================================
+        # 2. RÉCUPÉRER LES TYPES DE DOCUMENTS OBLIGATOIRES
+        #    DE LA FAMILLE DE L'IMMOBILISATION
+        # ============================================================
+
+        documents_requis = (
+            TypeDocumentFamille.objects
+            .filter(
+                famille=immobilisation.famille,
+                obligatoire=True,
+                type_document__statut=TypeDocument.Statut.ACTIF,
+            )
+            .select_related("type_document")
+            .order_by("type_document__nom")
+        )
+
+        # ============================================================
+        # 3. RÉCUPÉRER LES DOCUMENTS EXISTANTS
+        # ============================================================
+
+        documents_existants = (
+            Document.objects
+            .filter(
+                entreprise=entreprise,
+                immobilisation=immobilisation,
+                statut=Document.Statut.ACTIF,
+            )
+            .select_related("type_document")
+            .order_by("-date_ajout")
+        )
+
+        # ============================================================
+        # 4. REGROUPER LES DOCUMENTS PAR TYPE
+        # ============================================================
+
+        documents_par_type = defaultdict(list)
+
+        for document in documents_existants:
+
+            documents_par_type[
+                document.type_document_id
+            ].append(
+                {
+                    "id": document.id,
+                    "nom": document.nom,
+                    "description": document.description,
+                    "fichier": (
+                        request.build_absolute_uri(
+                            document.fichier.url
+                        )
+                        if document.fichier
+                        else None
+                    ),
+                    "date_document": document.date_document,
+                    "date_debut_validite": (
+                        document.date_debut_validite
+                    ),
+                    "date_fin_validite": (
+                        document.date_fin_validite
+                    ),
+                    "statut": document.statut,
+                }
+            )
+
+        # ============================================================
+        # 5. CONSTRUIRE LA RÉPONSE
+        # ============================================================
+
+        resultat = []
+
+        for relation in documents_requis:
+
+            type_document = relation.type_document
+
+            documents = documents_par_type.get(
+                type_document.id_type_document,
+                []
+            )
+
+            resultat.append(
+                {
+                    "id_type_document": (
+                        type_document.id_type_document
+                    ),
+                    "nom_type_document": type_document.nom,
+                    "obligatoire": relation.obligatoire,
+                    "present": len(documents) > 0,
+                    "documents": documents,
+                }
+            )
+
+        serializer = DocumentRequisSerializer(
+            resultat,
+            many=True,
+        )
+
+        return Response(
+            {
+                "immobilisation": {
+                    "id": immobilisation.id_immobilisation,
+                    "code": immobilisation.code,
+                    "designation": immobilisation.designation,
+                    "famille": (
+                        immobilisation.famille.nom
+                    ),
+                },
+                "documents_requis": serializer.data,
+                "nombre_documents_requis": len(resultat),
+                "nombre_documents_presents": sum(
+                    1
+                    for document in resultat
+                    if document["present"]
+                ),
+                "nombre_documents_manquants": sum(
+                    1
+                    for document in resultat
+                    if not document["present"]
+                ),
             },
             status=status.HTTP_200_OK,
         )

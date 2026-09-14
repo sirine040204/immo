@@ -21,6 +21,7 @@ from .views import (
     RemettreEnServiceImmobilisationView,
     ReformerImmobilisationView,
     ResetTestImmobilisationView,
+    ImmobilisationDocumentsRequisView,
     )
 
 
@@ -180,5 +181,11 @@ urlpatterns = [
         "releves-usage/<int:releve_id>/",
         ReleveUsageDetailView.as_view(),
         name="releve-usage-detail",
+    ),
+    #urls pour les documents requis
+    path(
+        "immobilisations/<int:id_immobilisation>/documents-requis/",
+        ImmobilisationDocumentsRequisView.as_view(),
+        name="immobilisation-documents-requis",
     ),
 ]

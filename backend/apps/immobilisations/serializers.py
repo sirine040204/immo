@@ -1079,3 +1079,16 @@ class ReleveUsageSerializer(serializers.ModelSerializer):
             "date_releve",
         ]
         read_only_fields = fields
+
+#Ce serializer ne correspond pas directement à un modèle Django. Il sert uniquement à formater notre réponse.
+class DocumentRequisSerializer(serializers.Serializer):
+
+    id_type_document = serializers.IntegerField()
+
+    nom_type_document = serializers.CharField()
+
+    obligatoire = serializers.BooleanField()
+
+    present = serializers.BooleanField()
+
+    documents = serializers.ListField()

@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 
 from ..accounts.models import Entreprise
-from ..immobilisations.models import Immobilisation
+from ..immobilisations.models import Immobilisation, Famille
 
 from django.contrib.auth import get_user_model
 
@@ -165,3 +165,45 @@ class Document(models.Model):
 
     def __str__(self):
         return self.nom
+
+#TypeDocumentFamille
+class TypeDocumentFamille(models.Model):
+
+    id_type_document_famille = models.BigAutoField(
+        primary_key=True
+    )
+
+    type_document = models.ForeignKey(
+        TypeDocument,
+        on_delete=models.PROTECT,
+        related_name="types_familles",
+    )
+
+    famille = models.ForeignKey(
+        Famille,
+        on_delete=models.PROTECT,
+        related_name="types_documents",
+    )
+
+    obligatoire = models.BooleanField(
+        default=False
+    )
+
+    class Meta:
+        db_table = "type_document_famille"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "type_document",
+                    "famille",
+                ],
+                name="unique_type_document_famille",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.famille.nom} - "
+            f"{self.type_document.nom}"
+        )
