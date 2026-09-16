@@ -7,6 +7,17 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.http import FileResponse
+from django.db import transaction
+
+from ..notifications.models import Notification
+
+from ..notifications.services.notification_service import (
+    create_notification,
+)
+
+from ..notifications.services.recipient_service import (
+    get_recipients_for_document,
+)
 
 from .models import Document, TypeDocument, TypeDocumentFamille
 
@@ -430,36 +441,35 @@ class DocumentListCreateView(APIView):
         )
 
     def post(self, request):
-        """
-        Create a document.
-
-        The enterprise and creator are automatically taken
-        from the authenticated user inside the serializer.
-        """
-
         serializer = DocumentSerializer(
             data=request.data,
-            context={
-                "request": request
-            }
+            context={"request": request},
         )
 
         if serializer.is_valid():
             document = serializer.save()
 
+            recipients = get_recipients_for_document(document)
+
+            create_notification(
+                entreprise=document.entreprise,
+                destinataires=recipients,
+                type_notification=Notification.Type.DOCUMENT_AJOUT,
+                niveau=Notification.Niveau.INFO,
+                titre="Nouveau document ajouté",
+                message=f'Le document "{document.nom}" a été ajouté.',
+                cle_unique=f"document-{document.id}-ajout",
+                document=document,
+            )
+
             return Response(
-                DocumentSerializer(
-                    document,
-                    context={
-                        "request": request
-                    }
-                ).data,
-                status=status.HTTP_201_CREATED
+                DocumentSerializer(document).data,
+                status=status.HTTP_201_CREATED,
             )
 
         return Response(
             serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
 #GET /api/v1/documents/<int:document_id>/

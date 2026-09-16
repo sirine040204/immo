@@ -38,6 +38,10 @@ urlpatterns = [
     "api/v1/costs/",
     include("apps.costs.urls"),
 ),
+    path(
+    "api/v1/notifications/",
+    include("apps.notifications.urls")
+),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

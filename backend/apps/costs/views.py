@@ -1,9 +1,23 @@
+from asyncio import coroutines
+from asyncio import coroutines
+from asyncio import coroutines
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from django.db import transaction
 from django.utils import timezone
+from ..notifications.models import Notification
 
+from ..notifications.services.notification_service import (
+    create_notification,
+    create_single_notification,
+)
+
+from ..notifications.services.recipient_service import (
+    get_recipients_for_cost_validation,
+    get_creator_for_cost,
+)
 from django.shortcuts import get_object_or_404
 
 from .models import CoutImmobilisation
@@ -488,13 +502,38 @@ class CoutImmobilisationWorkflowView(APIView):
             cout.modifie_par = user
             cout.date_modification = timezone.now()
 
-            cout.save(
-                update_fields=[
-                    "statut",
-                    "modifie_par",
-                    "date_modification",
-                ]
-            )
+            with transaction.atomic():
+
+                cout.statut = (
+                    CoutImmobilisation.Statut.EN_ATTENTE_VALIDATION
+                )
+                cout.modifie_par = user
+                cout.date_modification = timezone.now()
+
+                cout.save(
+                    update_fields=[
+                        "statut",
+                        "modifie_par",
+                        "date_modification",
+                    ]
+                )
+
+                destinataires = get_recipients_for_cost_validation(cout)
+
+                create_notification(
+                    entreprise=cout.immobilisation.entreprise,
+                    destinataires=destinataires,
+                    type_notification=Notification.Type.COUT_VALIDATION,
+                    niveau=Notification.Niveau.INFO,
+                    titre="Nouveau coût à valider",
+                    message=(
+                        f"Le coût #{cout.id_cout} de l'immobilisation "
+                        f"#{cout.immobilisation_id} est en attente de validation."
+                    ),
+                    cle_unique=f"cout-{cout.id_cout}-en-attente-validation",
+                    cout=cout,
+                    immobilisation=cout.immobilisation,
+                )
 
             return Response(
                 {
@@ -547,16 +586,40 @@ class CoutImmobilisationWorkflowView(APIView):
             cout.date_modification = timezone.now()
             cout.motif_rejet = None
 
-            cout.save(
-                update_fields=[
-                    "statut",
-                    "valide_par",
-                    "date_validation",
-                    "modifie_par",
-                    "date_modification",
-                    "motif_rejet",
-                ]
-            )
+            with transaction.atomic():
+
+                cout.statut = CoutImmobilisation.Statut.VALIDE
+                cout.valide_par = user
+                cout.date_validation = timezone.now()
+                cout.modifie_par = user
+                cout.date_modification = timezone.now()
+                cout.motif_rejet = None
+
+                cout.save(
+                    update_fields=[
+                        "statut",
+                        "valide_par",
+                        "date_validation",
+                        "modifie_par",
+                        "date_modification",
+                        "motif_rejet",
+                    ]
+                )
+
+                create_single_notification(
+                    entreprise=cout.immobilisation.entreprise,
+                    destinataire=get_creator_for_cost(cout),
+                    type_notification=Notification.Type.COUT_VALIDATION,
+                    niveau=Notification.Niveau.INFO,
+                    titre="Coût validé",
+                    message=(
+                        f"Votre coût #{cout.id_cout} pour l'immobilisation "
+                        f"#{cout.immobilisation_id} a été validé."
+                    ),
+                    cle_unique=f"cout-{cout.id_cout}-valide",
+                    cout=cout,
+                    immobilisation=cout.immobilisation,
+                )
 
             return Response(
                 {
@@ -621,16 +684,41 @@ class CoutImmobilisationWorkflowView(APIView):
             cout.modifie_par = user
             cout.date_modification = timezone.now()
 
-            cout.save(
-                update_fields=[
-                    "statut",
-                    "motif_rejet",
-                    "valide_par",
-                    "date_validation",
-                    "modifie_par",
-                    "date_modification",
-                ]
-            )
+            with transaction.atomic():
+
+                cout.statut = CoutImmobilisation.Statut.REJETE
+                cout.motif_rejet = motif_rejet
+                cout.valide_par = None
+                cout.date_validation = None
+                cout.modifie_par = user
+                cout.date_modification = timezone.now()
+
+                cout.save(
+                    update_fields=[
+                        "statut",
+                        "motif_rejet",
+                        "valide_par",
+                        "date_validation",
+                        "modifie_par",
+                        "date_modification",
+                    ]
+                )
+
+                create_single_notification(
+                    entreprise=cout.immobilisation.entreprise,
+                    destinataire=get_creator_for_cost(cout),
+                    type_notification=Notification.Type.COUT_VALIDATION,
+                    niveau=Notification.Niveau.WARNING,
+                    titre="Coût rejeté",
+                    message=(
+                        f"Votre coût #{cout.id_cout} pour l'immobilisation "
+                        f"#{cout.immobilisation_id} a été rejeté. "
+                        f"Motif : {motif_rejet}"
+                    ),
+                    cle_unique=f"cout-{cout.id_cout}-rejete",
+                    cout=cout,
+                    immobilisation=cout.immobilisation,
+                )
 
             return Response(
                 {

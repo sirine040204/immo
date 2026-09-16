@@ -10,6 +10,17 @@ from rest_framework.exceptions import ValidationError
 from ..accounts.permissions import HasPermission
 from django.db import transaction
 from .services import generer_suivis_depuis_modele
+from ..notifications.models import Notification
+
+from ..notifications.services.notification_service import (
+    create_notification,
+    create_single_notification,
+)
+
+from ..notifications.services.recipient_service import (
+    get_recipients_for_intervention,
+    get_creator_for_intervention,
+)
 
 from .models import (TypeEntretien,
     ModeleEntretien,
@@ -540,6 +551,26 @@ class InterventionListCreateView(generics.ListCreateAPIView):
                 "demande_par",
             )
         )
+    def perform_create(self, serializer):
+        intervention = serializer.save()
+
+        recipients = get_recipients_for_intervention(intervention)
+
+        create_notification(
+            entreprise=intervention.entreprise,
+            destinataires=recipients,
+            type_notification=Notification.Type.MAINTENANCE,
+            niveau=Notification.Niveau.INFO,
+            titre="Nouvelle intervention créée",
+            message=(
+                f"Une nouvelle intervention concernant "
+                f"l'immobilisation #{intervention.immobilisation_id} "
+                f"a été créée par {intervention.demande_par}."
+            ),
+            cle_unique=f"intervention-{intervention.id}-creation",
+            intervention=intervention,
+            immobilisation=intervention.immobilisation,
+        )
 
 # GET   /api/v1/maintenance/interventions/{id}/
 # PATCH /api/v1/maintenance/interventions/{id}/
@@ -662,6 +693,79 @@ class InterventionStatutView(generics.GenericAPIView):
                 "date_fin",
             ]
         )
+                # Create a notification only when the status really changes.
+        if ancien_statut != nouveau_statut:
+
+            destinataire = get_creator_for_intervention(intervention)
+
+            titres = {
+                Intervention.Statut.PLANIFIEE:
+                    "Intervention planifiée",
+
+                Intervention.Statut.EN_COURS:
+                    "Intervention commencée",
+
+                Intervention.Statut.TERMINEE:
+                    "Intervention terminée",
+
+                Intervention.Statut.ANNULEE:
+                    "Intervention annulée",
+            }
+
+            messages = {
+                Intervention.Statut.PLANIFIEE:
+                    (
+                        f"Votre intervention #{intervention.id} "
+                        "a été planifiée."
+                    ),
+
+                Intervention.Statut.EN_COURS:
+                    (
+                        f"Votre intervention #{intervention.id} "
+                        "est maintenant en cours."
+                    ),
+
+                Intervention.Statut.TERMINEE:
+                    (
+                        f"Votre intervention #{intervention.id} "
+                        "est terminée."
+                    ),
+
+                Intervention.Statut.ANNULEE:
+                    (
+                        f"Votre intervention #{intervention.id} "
+                        "a été annulée."
+                    ),
+            }
+
+            niveaux = {
+                Intervention.Statut.PLANIFIEE:
+                    Notification.Niveau.INFO,
+
+                Intervention.Statut.EN_COURS:
+                    Notification.Niveau.INFO,
+
+                Intervention.Statut.TERMINEE:
+                    Notification.Niveau.INFO,
+
+                Intervention.Statut.ANNULEE:
+                    Notification.Niveau.WARNING,
+            }
+
+            create_single_notification(
+                entreprise=intervention.entreprise,
+                destinataire=destinataire,
+                type_notification=Notification.Type.MAINTENANCE,
+                niveau=niveaux[nouveau_statut],
+                titre=titres[nouveau_statut],
+                message=messages[nouveau_statut],
+                cle_unique=(
+                    f"intervention-{intervention.id}-"
+                    f"statut-{nouveau_statut.lower()}"
+                ),
+                intervention=intervention,
+                immobilisation=intervention.immobilisation,
+            )
 
         # Generate model-based steps only when planning for the first time
         if (
