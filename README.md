@@ -74,10 +74,11 @@ The frontend is available at http://localhost:3000. It communicates with the bac
 
 | Path | What |
 |---|---|
-| [frontend/src/app/](frontend/src/app/) | Next.js routes and application layouts |
-| [frontend/src/components/ui/](frontend/src/components/ui/) | Reusable shadcn/ui components |
-| [frontend/src/components/layout/](frontend/src/components/layout/) | App-level components (headers, footers) |
-| [frontend/src/features/](frontend/src/features/) | Feature-specific frontend code (when added) |
-| [frontend/src/services/api/](frontend/src/services/api/) | Centralized API client abstraction |
+| [frontend/src/app/](frontend/src/app/) | Next.js App Router (Routing, Pages, and Layouts) |
+| [frontend/src/core/](frontend/src/core/) | Core logic (Global auth state, error handlers, providers) |
+| [frontend/src/features/](frontend/src/features/) | Feature-sliced business domains (immobilisations, documents, etc.) |
+| [frontend/src/layout/](frontend/src/layout/) | App-level shell components (Sidebar, Header) |
+| [frontend/src/services/api/](frontend/src/services/api/) | Centralized API client and HTTP intercepts |
+| [frontend/src/shared/](frontend/src/shared/) | Reusable UI, hooks, and types (including shadcn/ui base in `shared/components/ui/`) |
 | [backend/config/](backend/config/) | Django settings and core configuration |
 | [backend/apps/](backend/apps/) | Django application modules |

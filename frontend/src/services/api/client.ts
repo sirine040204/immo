@@ -1,41 +1,52 @@
-/**
- * Centralized API client for communication with the Django backend.
- * 
- * Ensures all requests go through a single point, handling base URLs,
- * generic headers, authentication tokens (when implemented), and error handling.
- */
+import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/';
+// The base URL can be defined in .env.local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
-export async function apiClient<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const url = new URL(endpoint, API_BASE_URL);
-
-  const defaultHeaders: HeadersInit = {
+export const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
     'Content-Type': 'application/json',
-    // 'Authorization': `Bearer ${token}` // TODO: Add auth token later
-  };
+  },
+});
 
-  const response = await fetch(url.toString(), {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    // Handle generic HTTP errors
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `API Error: ${response.status}`);
+// Request Interceptor
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    // Only access localStorage in the browser
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error: AxiosError) => {
+    return Promise.reject(error);
   }
+);
 
-  // Handle empty responses
-  if (response.status === 204) {
-    return {} as T;
+// Response Interceptor
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => {
+    return response;
+  },
+  async (error: AxiosError) => {
+    // Basic 401 Handling (Logging out the user if access token is invalid)
+    if (error.response?.status === 401) {
+      if (typeof window !== "undefined") {
+        // Clear tokens from storage
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        
+        // Optional: Trigger a custom event to notify AuthContext to update state,
+        // or redirect to login page. For now, a simple reload or letting context handle it.
+        window.dispatchEvent(new Event("auth:logout"));
+      }
+    }
+    
+    // Pass the error to the global error handler or feature component
+    return Promise.reject(error);
   }
-
-  return response.json() as Promise<T>;
-}
+);
