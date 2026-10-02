@@ -5,17 +5,17 @@ This project is the foundational scaffolding for the frontend and backend of the
 ## Architecture & Technologies
 
 **Frontend**:
-- Next.js 15+ (App Router)
-- React 19
+- Next.js 16.3.2 (App Router)
+- React 19.2.8
 - TypeScript
 - Tailwind CSS v4
 - shadcn/ui (with RTL support initialized for Arabic translation readiness)
 - Centralized API service layer (`frontend/src/services/api/client.ts`)
 
 **Backend**:
-- Python 3.12+
-- Django 5.2+
-- Django REST Framework
+- Python 3.14.6
+- Django 6.1
+- Django REST Framework 3.18.0
 - PostgreSQL (Mandatory for all environments)
 
 **Database**:
@@ -25,7 +25,7 @@ PostgreSQL is required. SQLite is explicitly disabled for local development to e
 
 ## Running it locally
 
-Prerequisites: **Python 3.12+**, **Node 22+**, **npm**, **PostgreSQL**.
+Prerequisites: **Python 3.14.6**, **Node 22+**, **npm**, **PostgreSQL**.
 
 ### 1. Database Setup
 Create a local PostgreSQL database for the project. For example:
