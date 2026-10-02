@@ -527,8 +527,8 @@ class CoutImmobilisationWorkflowView(APIView):
                     niveau=Notification.Niveau.INFO,
                     titre="Nouveau coût à valider",
                     message=(
-                        f"Le coût #{cout.id_cout} de l'immobilisation "
-                        f"#{cout.immobilisation_id} est en attente de validation."
+                        f"Le coût « {cout.libelle} » de l'immobilisation "
+                        f"{cout.immobilisation.code} est en attente de validation."
                     ),
                     cle_unique=f"cout-{cout.id_cout}-en-attente-validation",
                     cout=cout,
@@ -613,8 +613,8 @@ class CoutImmobilisationWorkflowView(APIView):
                     niveau=Notification.Niveau.INFO,
                     titre="Coût validé",
                     message=(
-                        f"Votre coût #{cout.id_cout} pour l'immobilisation "
-                        f"#{cout.immobilisation_id} a été validé."
+                        f"Votre coût « {cout.libelle} » pour l'immobilisation "
+                        f"{cout.immobilisation.code} a été validé."
                     ),
                     cle_unique=f"cout-{cout.id_cout}-valide",
                     cout=cout,
@@ -711,8 +711,8 @@ class CoutImmobilisationWorkflowView(APIView):
                     niveau=Notification.Niveau.WARNING,
                     titre="Coût rejeté",
                     message=(
-                        f"Votre coût #{cout.id_cout} pour l'immobilisation "
-                        f"#{cout.immobilisation_id} a été rejeté. "
+                        f"Votre coût « {cout.libelle} » pour l'immobilisation "
+                        f"{cout.immobilisation.code} a été rejeté. "
                         f"Motif : {motif_rejet}"
                     ),
                     cle_unique=f"cout-{cout.id_cout}-rejete",
@@ -739,3 +739,166 @@ class CoutImmobilisationWorkflowView(APIView):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+# ============================================================
+# ARCHIVAGE D'UN COÛT
+# ============================================================
+
+
+# POST /api/v1/costs/<int:id_cout>/archive/
+# POST /api/v1/costs/<int:id_cout>/unarchive/
+class CoutImmobilisationArchiveView(APIView):
+    """
+    archive:
+        Marque un coût comme archivé. Tout statut est accepté.
+
+    unarchive:
+        Restaure un coût archivé.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = {
+        "POST": "COUT_IMMOBILISATION_MODIFIER",
+    }
+
+    def get_cout(self, request, id_cout):
+        return get_object_or_404(
+            CoutImmobilisation.objects.select_related(
+                "immobilisation",
+                "document",
+                "cree_par",
+                "modifie_par",
+                "valide_par",
+                "archive_par",
+            ),
+            id_cout=id_cout,
+            immobilisation__entreprise=request.user.entreprise,
+        )
+
+    def post(self, request, id_cout, action):
+
+        cout = self.get_cout(request, id_cout)
+        user = request.user
+
+        if action == "archive":
+
+            if cout.is_archived:
+                return Response(
+                    {"detail": "Ce coût est déjà archivé."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                cout.is_archived = True
+                cout.date_archivage = timezone.now()
+                cout.archive_par = user
+                cout.save(update_fields=["is_archived", "date_archivage", "archive_par"])
+
+            return Response(
+                CoutImmobilisationSerializer(cout, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+
+        if action == "unarchive":
+
+            if not cout.is_archived:
+                return Response(
+                    {"detail": "Ce coût n'est pas archivé."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                cout.is_archived = False
+                cout.date_archivage = None
+                cout.archive_par = None
+                cout.save(update_fields=["is_archived", "date_archivage", "archive_par"])
+
+            return Response(
+                CoutImmobilisationSerializer(cout, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {"detail": "Action d'archivage inconnue."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+import csv
+from django.http import HttpResponse
+
+class CoutImmobilisationExportCSVView(APIView):
+    """
+    Exporte les coûts validés au format CSV (type Odoo/Sage).
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission,
+    ]
+
+    required_permission = "COUT_IMMOBILISATION_CONSULTER"
+
+    def get(self, request):
+        entreprise = request.user.entreprise
+
+        queryset = CoutImmobilisation.objects.filter(
+            immobilisation__entreprise=entreprise,
+            statut=CoutImmobilisation.Statut.VALIDE,
+            is_archived=False
+        ).select_related(
+            "immobilisation",
+            "cree_par",
+            "valide_par"
+        ).order_by("-date_cout", "-id_cout")
+
+        # Filtre optionnel par date
+        date_debut = request.query_params.get("date_debut")
+        date_fin = request.query_params.get("date_fin")
+        
+        if date_debut:
+            queryset = queryset.filter(date_cout__gte=date_debut)
+        if date_fin:
+            queryset = queryset.filter(date_cout__lte=date_fin)
+
+        response = HttpResponse(
+            content_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="export_couts.csv"'},
+        )
+
+        writer = csv.writer(response, delimiter=";")
+        
+        # En-têtes typiques pour l'importation comptable
+        writer.writerow([
+            "Date", 
+            "Immobilisation", 
+            "Type de Coût", 
+            "Libellé", 
+            "Montant HT", 
+            "Taux TVA", 
+            "Montant TVA", 
+            "Montant TTC", 
+            "Validé Par", 
+            "Date Validation"
+        ])
+
+        for cout in queryset:
+            writer.writerow([
+                cout.date_cout.strftime("%d/%m/%Y"),
+                cout.immobilisation.code,
+                cout.get_type_cout_display(),
+                cout.libelle,
+                str(cout.montant_ht).replace(".", ","),
+                str(cout.taux_tva).replace(".", ","),
+                str(cout.montant_tva).replace(".", ","),
+                str(cout.montant_ttc).replace(".", ","),
+                cout.valide_par.email if cout.valide_par else "",
+                cout.date_validation.strftime("%d/%m/%Y") if cout.date_validation else ""
+            ])
+
+        return response

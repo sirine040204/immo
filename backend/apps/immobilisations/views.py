@@ -320,9 +320,13 @@ class AttributDynamiqueListCreateView(APIView):
     }
 
     def get(self, request):
-        attributs = AttributDynamique.objects.filter(
-            famille__entreprise=request.user.entreprise
-        )
+        famille_id = request.query_params.get('famille')
+        
+        filters = {'famille__entreprise': request.user.entreprise}
+        if famille_id:
+            filters['famille_id'] = famille_id
+
+        attributs = AttributDynamique.objects.filter(**filters)
 
         serializer = AttributDynamiqueSerializer(
             attributs,
@@ -887,6 +891,23 @@ class ImmobilisationListCreateView(APIView):
     }
 
     def get(self, request):
+        from django.db.models import Exists, OuterRef
+        from ..documents.models import TypeDocumentFamille, Document
+
+        missing_docs_subquery = TypeDocumentFamille.objects.filter(
+            famille=OuterRef('famille'),
+            obligatoire=True,
+            type_document__statut='ACTIF'
+        ).annotate(
+            has_doc=Exists(
+                Document.objects.filter(
+                    type_document=OuterRef('type_document'),
+                    immobilisation=OuterRef(OuterRef('id_immobilisation')),
+                    statut='ACTIF'
+                )
+            )
+        ).filter(has_doc=False)
+
         immobilisations = (
             Immobilisation.objects
             .filter(
@@ -896,6 +917,9 @@ class ImmobilisationListCreateView(APIView):
                 "famille",
                 "cree_par",
                 "modifie_par",
+            )
+            .annotate(
+                has_missing_documents=Exists(missing_docs_subquery)
             )
             .order_by(
                 "-date_creation",
@@ -949,6 +973,23 @@ class ImmobilisationDetailView(APIView):
     }
 
     def get_object(self, request, immobilisation_id):
+        from django.db.models import Exists, OuterRef
+        from ..documents.models import TypeDocumentFamille, Document
+
+        missing_docs_subquery = TypeDocumentFamille.objects.filter(
+            famille=OuterRef('famille'),
+            obligatoire=True,
+            type_document__statut='ACTIF'
+        ).annotate(
+            has_doc=Exists(
+                Document.objects.filter(
+                    type_document=OuterRef('type_document'),
+                    immobilisation=OuterRef(OuterRef('id_immobilisation')),
+                    statut='ACTIF'
+                )
+            )
+        ).filter(has_doc=False)
+
         try:
             return (
                 Immobilisation.objects
@@ -956,6 +997,9 @@ class ImmobilisationDetailView(APIView):
                     "famille",
                     "cree_par",
                     "modifie_par",
+                )
+                .annotate(
+                    has_missing_documents=Exists(missing_docs_subquery)
                 )
                 .get(
                     id_immobilisation=immobilisation_id,
@@ -1032,6 +1076,7 @@ class ImmobilisationDetailView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+        print("Serializer errors:", serializer.errors)
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
@@ -1351,6 +1396,7 @@ class ReformerImmobilisationView(APIView):
         )
 
         if not serializer.is_valid():
+            print("REFORMER VALIDATION ERRORS:", serializer.errors)
             return Response(
                 serializer.errors,
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1613,17 +1659,23 @@ class ReleveUsageListView(APIView):
     }
 
     def get(self, request):
+        immobilisation_id = request.query_params.get("immobilisation")
+        
+        queryset = ReleveUsage.objects.filter(
+            immobilisation__entreprise=request.user.entreprise
+        )
+        
+        if immobilisation_id:
+            queryset = queryset.filter(immobilisation_id=immobilisation_id)
+            
         releves = (
-            ReleveUsage.objects
-            .filter(
-                immobilisation__entreprise=request.user.entreprise
-            )
+            queryset
             .select_related(
                 "immobilisation",
                 "attribut",
                 "option",
             )
-            .order_by("date_releve", "id")
+            .order_by("-date_releve", "-id")  # Order descending for history timeline
         )
 
         serializer = ReleveUsageSerializer(
@@ -1871,7 +1923,7 @@ class ImmobilisationDocumentsRequisView(APIView):
                         if document.fichier
                         else None
                     ),
-                    "date_document": document.date_document,
+                    "date_document": document.date_ajout,
                     "date_debut_validite": (
                         document.date_debut_validite
                     ),

@@ -11,14 +11,53 @@ from .views import (
     EmployeeListView,
     RoleListCreateView,
     RoleDetailView,
+    RoleReactivationView,
+    PermissionListView,
     EmployeeDetailView,
+    EmployeeDeactivationView,
+    EmployeeReactivationView,
+    EmployeeInvitationCancelView,
     CompanyProfileView,
     CompanyRejectionView,
     CompanySuspensionView,
     CompanyReactivationView,
+    UserProfileView,
+    PasswordResetRequestView,
+    PasswordResetVerifyOTPView,
+    PasswordResetConfirmView,
+    GoogleLoginView,
+    PermissionRequestMeView,
+    PermissionRequestListCreateView,
+    PermissionRequestProcessView,
+    EmployeeExtraPermissionListView,
+    EmployeeExtraPermissionDeleteView,
 )
 
+from .webauthn_views import (
+    WebAuthnRegisterOptionsView,
+    WebAuthnRegisterVerifyView,
+    WebAuthnLoginOptionsView,
+    WebAuthnLoginVerifyView,
+)
+
+from .ai_face_views import (
+    AIFaceRegisterView,
+    AIFaceLoginView,
+)
+
+from .password_change_views import ChangePasswordWithOldView
+
 urlpatterns = [
+    path(
+        "me/",
+        UserProfileView.as_view(),
+        name="user-profile",
+    ),
+    path(
+        "me/change-password/",
+        ChangePasswordWithOldView.as_view(),
+        name="change-password-old",
+    ),
     path(
         "register/",
         CompanyAdminRegistrationView.as_view(),
@@ -29,6 +68,41 @@ urlpatterns = [
         "login/",
         LoginView.as_view(),
         name="login",
+    ),
+    path(
+        "google-login/",
+        GoogleLoginView.as_view(),
+        name="google-login",
+    ),
+    path(
+        "webauthn/register/options/",
+        WebAuthnRegisterOptionsView.as_view(),
+        name="webauthn-register-options",
+    ),
+    path(
+        "webauthn/register/verify/",
+        WebAuthnRegisterVerifyView.as_view(),
+        name="webauthn-register-verify",
+    ),
+    path(
+        "webauthn/login/options/",
+        WebAuthnLoginOptionsView.as_view(),
+        name="webauthn-login-options",
+    ),
+    path(
+        "webauthn/login/verify/",
+        WebAuthnLoginVerifyView.as_view(),
+        name="webauthn-login-verify",
+    ),
+    path(
+        "ai-face/register/",
+        AIFaceRegisterView.as_view(),
+        name="ai-face-register",
+    ),
+    path(
+        "ai-face/login/",
+        AIFaceLoginView.as_view(),
+        name="ai-face-login",
     ),
     path(
         "companies/<int:company_id>/approve/",
@@ -86,14 +160,78 @@ urlpatterns = [
         name="role-detail",
     ),
     path(
+        "roles/<int:role_id>/reactivate/",
+        RoleReactivationView.as_view(),
+        name="role-reactivate",
+    ),
+    path(
+        "permissions/",
+        PermissionListView.as_view(),
+        name="permission-list",
+    ),
+    path(
     "employees/<int:employee_id>/",
     EmployeeDetailView.as_view(),
     name="employee-detail",
 ),
     path(
+    "employees/<int:employee_id>/deactivate/",
+    EmployeeDeactivationView.as_view(),
+    name="employee-deactivate",
+),
+    path(
+        "employees/<int:employee_id>/reactivate/",
+        EmployeeReactivationView.as_view(),
+        name="employee-reactivate",
+    ),
+    path(
+        "employees/<int:employee_id>/cancel-invitation/",
+        EmployeeInvitationCancelView.as_view(),
+        name="employee-cancel-invitation",
+    ),
+    path(
         "companies/me/",
         CompanyProfileView.as_view(),
         name="company-profile",
     ),
-    
+    path(
+        "password-reset/request/",
+        PasswordResetRequestView.as_view(),
+        name="password-reset-request",
+    ),
+    path(
+        "password-reset/verify-otp/",
+        PasswordResetVerifyOTPView.as_view(),
+        name="password-reset-verify-otp",
+    ),
+    path(
+        "password-reset/confirm/",
+        PasswordResetConfirmView.as_view(),
+        name="password-reset-confirm",
+    ),
+    path(
+        "permissions/requests/me/",
+        PermissionRequestMeView.as_view(),
+        name="permission-requests-me",
+    ),
+    path(
+        "permissions/requests/",
+        PermissionRequestListCreateView.as_view(),
+        name="permission-requests-list-create",
+    ),
+    path(
+        "permissions/requests/<int:pk>/process/",
+        PermissionRequestProcessView.as_view(),
+        name="permission-request-process",
+    ),
+    path(
+        "employees/<int:employee_id>/extra-permissions/",
+        EmployeeExtraPermissionListView.as_view(),
+        name="employee-extra-permissions",
+    ),
+    path(
+        "employees/<int:employee_id>/extra-permissions/<int:permission_id>/",
+        EmployeeExtraPermissionDeleteView.as_view(),
+        name="employee-extra-permission-delete",
+    ),
 ]

@@ -11,7 +11,8 @@ from ..accounts.permissions import HasPermission
 from django.db import transaction
 from .services import generer_suivis_depuis_modele
 from ..notifications.models import Notification
-
+from django.db.models import F, Avg, DurationField, ExpressionWrapper
+from ..immobilisations.models import Immobilisation
 from ..notifications.services.notification_service import (
     create_notification,
     create_single_notification,
@@ -502,6 +503,16 @@ class EtapeEntretienRestoreView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if EtapeEntretien.objects.filter(
+            modele_entretien=etape.modele_entretien,
+            ordre=etape.ordre,
+            statut=EtapeEntretien.Statut.ACTIF
+        ).exists():
+            return Response(
+                {"detail": "Impossible de restaurer cette étape car une étape active avec le même ordre existe déjà pour ce modèle."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         etape.statut = EtapeEntretien.Statut.ACTIF
         etape.save(update_fields=["statut"])
 
@@ -960,3 +971,156 @@ class RapportInterventionDetailView(
             })
 
         instance.delete()
+
+# POST /api/v1/maintenance/ai-chat/
+from rest_framework.views import APIView
+
+class AiChatbotView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user_message = request.data.get("message", "")
+        if not user_message:
+            return Response({"error": "Message est requis"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        import os
+        from openai import OpenAI
+        from ..immobilisations.models import Immobilisation
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        groq_key = os.getenv("GROQ_API_KEY")
+        
+        if not api_key and not groq_key:
+            # Fallback mock logic for demo
+            lower_msg = user_message.lower()
+            hs_count = Immobilisation.objects.filter(statut="HORS_SERVICE", entreprise=request.user.entreprise).count()
+            active_count = Immobilisation.objects.filter(statut="ACTIVE", entreprise=request.user.entreprise).count()
+            from .models import Intervention
+            interventions_count = Intervention.objects.filter(entreprise=request.user.entreprise, type_entretien__code__iexact='CORRECTIF').count()
+
+            if "résumé" in lower_msg or "état" in lower_msg or "parc" in lower_msg:
+                return Response({"reply": f"Voici un résumé de l'état actuel de votre parc : vous disposez actuellement de {active_count} immobilisation(s) active(s) et de {hs_count} immobilisation(s) hors service. Par ailleurs, nous avons enregistré un total de {interventions_count} intervention(s) corrective(s) (pannes)." })
+            elif "hors service" in lower_msg:
+                return Response({"reply": f"Vous avez actuellement {hs_count} immobilisation(s) hors service dans votre entreprise."})
+            elif "active" in lower_msg:
+                return Response({"reply": f"Vous avez {active_count} immobilisation(s) active(s) en ce moment."})
+            elif "intervention" in lower_msg or "panne" in lower_msg:
+                return Response({"reply": f"Il y a actuellement {interventions_count} intervention(s) corrective(s) ou pannes enregistrées. Souhaitez-vous les consulter en détail ?"})
+            else:
+                return Response({"reply": "Je suis votre assistant IA (Mode Démo). Je peux vous faire un résumé de l'état de votre parc, ou vous donner le nombre d'immobilisations actives, hors service, ou en panne !"})
+        try:
+            # If GROQ_API_KEY is present, use it with OpenAI SDK
+            if groq_key:
+                client = OpenAI(
+                    api_key=groq_key,
+                    base_url="https://api.groq.com/openai/v1"
+                )
+                model_name = "openai/gpt-oss-120b"
+            else:
+                client = OpenAI(api_key=api_key)
+                model_name = "gpt-3.5-turbo"
+            
+            # Enriched implementation for AI context
+            hs_count = Immobilisation.objects.filter(statut="HORS_SERVICE", entreprise=request.user.entreprise).count()
+            active_count = Immobilisation.objects.filter(statut="ACTIVE", entreprise=request.user.entreprise).count()
+            from .models import Intervention
+            interventions_count = Intervention.objects.filter(entreprise=request.user.entreprise, type_entretien__code__iexact='CORRECTIF').count()
+            
+            system_prompt = (
+                f"Vous êtes l'assistant virtuel intelligent de gestion de maintenance (GMAO). "
+                f"Voici les statistiques actuelles en temps réel de l'entreprise : "
+                f"1) {hs_count} machine(s)/véhicule(s) actuellement hors service. "
+                f"2) {active_count} machine(s)/véhicule(s) actuellement actifs. "
+                f"3) {interventions_count} intervention(s) corrective(s) répertoriée(s) en base. "
+                f"Répondez avec ces informations aux questions de l'utilisateur de manière naturelle, serviable et toujours en français."
+            )
+            
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=250
+            )
+            reply = response.choices[0].message.content
+            return Response({"reply": reply})
+        except Exception as e:
+            error_msg = str(e)
+            if "Incorrect API key" in error_msg or "AuthenticationError" in error_msg or "401" in error_msg:
+                return Response({"reply": "Erreur : La clé configurée dans le backend semble invalide. Veuillez vérifier votre clé API."})
+            
+            if "insufficient_quota" in error_msg or "429" in error_msg or "credit_balance_exhausted" in error_msg:
+                return Response({"reply": "Erreur : Votre compte API n'a plus de crédits disponibles. Veuillez recharger votre compte."})
+                
+            if "model_not_found" in error_msg or "does not exist" in error_msg or "404" in error_msg:
+                return Response({"reply": "Erreur : Le modèle d'IA sélectionné est introuvable ou indisponible. Veuillez contacter l'administrateur."})
+            
+            print("OPENAI EXCEPTION:", e)
+            import traceback
+            traceback.print_exc()
+            return Response({"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class MaintenanceKPIsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        entreprise = request.user.entreprise
+        
+        # --- MTTR (Mean Time To Repair) ---
+        corrective_interventions = Intervention.objects.filter(
+            entreprise=entreprise,
+            type_entretien__code__iexact="CORRECTIF",
+            statut=Intervention.Statut.TERMINEE,
+            date_debut__isnull=False,
+            date_fin__isnull=False
+        )
+        
+        # Calculate the average duration between date_debut and date_fin
+        mttr_query = corrective_interventions.annotate(
+            duration=ExpressionWrapper(F('date_fin') - F('date_debut'), output_field=DurationField())
+        ).aggregate(avg_duration=Avg('duration'))
+        
+        avg_duration = mttr_query['avg_duration']
+        if avg_duration:
+            # avg_duration is a timedelta object. Extract hours.
+            mttr_hours = avg_duration.total_seconds() / 3600
+        else:
+            mttr_hours = 0
+            
+        # --- MTBF (Mean Time Between Failures) ---
+        # Total uptime in days = Sum(today - start_date) for all active assets
+        active_assets = Immobilisation.objects.filter(
+            entreprise=entreprise,
+            statut=Immobilisation.Statut.ACTIVE,
+            date_acquisition__isnull=False
+        )
+        
+        today = timezone.now().date()
+        total_uptime_days = 0
+        for asset in active_assets:
+            start_date = asset.date_mise_en_service or asset.date_acquisition
+            if start_date and start_date <= today:
+                total_uptime_days += (today - start_date).days
+                
+        # Total failures
+        total_failures = Intervention.objects.filter(
+            entreprise=entreprise,
+            type_entretien__code__iexact="CORRECTIF"
+        ).count()
+        
+        if total_failures > 0:
+            mtbf_days = total_uptime_days / total_failures
+        else:
+            # If no failures, mtbf is basically the average uptime
+            if active_assets.count() > 0:
+                mtbf_days = total_uptime_days / active_assets.count()
+            else:
+                mtbf_days = 0
+                
+        return Response({
+            "mttr_hours": round(mttr_hours, 1),
+            "mtbf_days": round(mtbf_days, 1),
+            "mttr_trend": -12,  # Mock trend for now
+            "mtbf_trend": 5     # Mock trend for now
+        })

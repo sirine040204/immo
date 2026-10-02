@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
 // The base URL can be defined in .env.local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -10,9 +10,50 @@ export const apiClient = axios.create({
   },
 });
 
+import { containsProfanity, isImageNSFW } from "@/shared/utils/moderation";
+
 // Request Interceptor
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
+    // ── GLOBAL AI MODERATION ──
+    if (config.method && ['post', 'put', 'patch'].includes(config.method.toLowerCase())) {
+      try {
+        if (config.data instanceof FormData) {
+          // Check FormData (usually File uploads and fields)
+          for (const [key, value] of config.data.entries()) {
+            if (typeof value === 'string' && containsProfanity(value)) {
+              throw new Error("Profanity");
+            } else if (value instanceof File && value.type.startsWith("image/")) {
+              const isBad = await isImageNSFW(value);
+              if (isBad) throw new Error("NSFW");
+            }
+          }
+        } else if (config.data && typeof config.data === 'object') {
+          // Check JSON body deeply
+          const checkObj = (obj: any) => {
+            if (!obj) return;
+            if (typeof obj === 'string' && containsProfanity(obj)) {
+              throw new Error("Profanity");
+            } else if (typeof obj === 'object') {
+              Object.values(obj).forEach(checkObj);
+            }
+          };
+          checkObj(config.data);
+        }
+      } catch (e: any) {
+        // Return a mock AxiosError so the frontend components naturally show the toast
+        return Promise.reject({
+          response: {
+            data: {
+              detail: e.message === "NSFW" 
+                ? "L'image a été rejetée : Contenu inapproprié détecté par l'IA."
+                : "Votre texte contient un langage inapproprié. Veuillez le modifier."
+            }
+          }
+        });
+      }
+    }
+
     // Only access localStorage in the browser
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("access_token");
@@ -39,13 +80,27 @@ apiClient.interceptors.response.use(
         // Clear tokens from storage
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
-        
+
         // Optional: Trigger a custom event to notify AuthContext to update state,
         // or redirect to login page. For now, a simple reload or letting context handle it.
         window.dispatchEvent(new Event("auth:logout"));
       }
     }
-    
+
+    // 403 Permission Denied Handling
+    if (error.response?.status === 403) {
+      const data = error.response.data as any;
+      if (data?.missing_permission_code) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("permission:missing", { 
+              detail: { missing_permission_code: data.missing_permission_code } 
+            })
+          );
+        }
+      }
+    }
+
     // Pass the error to the global error handler or feature component
     return Promise.reject(error);
   }

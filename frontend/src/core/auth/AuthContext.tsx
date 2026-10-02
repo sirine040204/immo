@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const decoded = jwtDecode<JWTPayload>(token);
         // Basic check if token is expired
         if (decoded.exp * 1000 > Date.now()) {
-          setUser({ id: decoded.user_id });
+          setUser({ id_utilisateur: decoded.user_id } as User);
           setIsAuthenticated(true);
         } else {
           logout();
@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const decoded = jwtDecode<JWTPayload>(data.access);
-      setUser({ id: decoded.user_id });
+      setUser({ id_utilisateur: decoded.user_id } as User);
       setIsAuthenticated(true);
     } catch (error) {
       console.error("Failed to decode token on login");

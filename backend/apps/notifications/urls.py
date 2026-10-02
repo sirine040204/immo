@@ -6,6 +6,7 @@ from ..notifications.views import (
     NotificationReadView,
     NotificationUnreadView,
     NotificationReadAllView,
+    NotificationDeleteAllReadView,
 )
 
 
@@ -20,6 +21,12 @@ urlpatterns = [
         "read-all/",
         NotificationReadAllView.as_view(),
         name="notification-read-all",
+    ),
+
+    path(
+        "delete-read/",
+        NotificationDeleteAllReadView.as_view(),
+        name="notification-delete-read",
     ),
 
     path(

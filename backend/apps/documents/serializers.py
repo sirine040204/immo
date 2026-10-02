@@ -130,6 +130,16 @@ class TypeDocumentRestoreSerializer(serializers.Serializer):
 
 #document serializer
 class DocumentSerializer(serializers.ModelSerializer):
+    type_document_nom = serializers.CharField(source='type_document.nom', read_only=True)
+    ajoute_par_nom = serializers.SerializerMethodField()
+
+    def get_ajoute_par_nom(self, obj):
+        if obj.ajoute_par:
+            prenom = getattr(obj.ajoute_par, 'prenom', '')
+            nom = getattr(obj.ajoute_par, 'nom', '')
+            full_name = f"{prenom} {nom}".strip()
+            return full_name or getattr(obj.ajoute_par, 'email', '')
+        return None
 
     class Meta:
         model = Document
@@ -139,15 +149,16 @@ class DocumentSerializer(serializers.ModelSerializer):
             "entreprise",
             "immobilisation",
             "type_document",
+            "type_document_nom",
             "nom",
             "description",
             "fichier",
-            "date_document",
             "date_debut_validite",
             "date_fin_validite",
             "statut",
             "date_ajout",
             "ajoute_par",
+            "ajoute_par_nom",
         ]
 
         read_only_fields = [
@@ -209,20 +220,6 @@ class DocumentSerializer(serializers.ModelSerializer):
 
         return fichier
 
-    # ============================================================
-    # DATE DU DOCUMENT
-    # ============================================================
-
-    def validate_date_document(self, value):
-
-        today = timezone.localdate()
-
-        if value > today:
-            raise serializers.ValidationError(
-                "La date du document ne peut pas être dans le futur."
-            )
-
-        return value
 
     # ============================================================
     # VALIDATION GLOBALE
@@ -266,11 +263,6 @@ class DocumentSerializer(serializers.ModelSerializer):
         immobilisation = attrs.get(
             "immobilisation",
             instance.immobilisation if instance else None
-        )
-
-        date_document = attrs.get(
-            "date_document",
-            instance.date_document if instance else None
         )
 
         date_debut = attrs.get(
@@ -328,51 +320,6 @@ class DocumentSerializer(serializers.ModelSerializer):
             # On ne vérifie PAS que le statut est ACTIVE.
             # Une immobilisation CREEE, ACTIVE, HORS_SERVICE,
             # REFORMEE ou ARCHIVEE peut avoir des documents.
-
-        # ========================================================
-        # DATE DU DOCUMENT
-        # ========================================================
-
-        if date_document is None:
-            raise serializers.ValidationError({
-                "date_document": (
-                    "La date du document est obligatoire."
-                )
-            })
-
-        today = timezone.localdate()
-
-        if date_document > today:
-            raise serializers.ValidationError({
-                "date_document": (
-                    "La date du document ne peut pas être "
-                    "dans le futur."
-                )
-            })
-
-        # ========================================================
-        # COHÉRENCE DES DATES DE VALIDITÉ
-        # ========================================================
-
-        if date_debut is not None:
-
-            if date_debut < date_document:
-                raise serializers.ValidationError({
-                    "date_debut_validite": (
-                        "La date de début de validité ne peut pas "
-                        "être antérieure à la date du document."
-                    )
-                })
-
-        if date_fin is not None:
-
-            if date_fin < date_document:
-                raise serializers.ValidationError({
-                    "date_fin_validite": (
-                        "La date de fin de validité ne peut pas "
-                        "être antérieure à la date du document."
-                    )
-                })
 
         if (
             date_debut is not None

@@ -119,7 +119,6 @@ class Document(models.Model):
     # DATES
     # =========================
 
-    date_document = models.DateField()
 
     date_debut_validite = models.DateField(
         null=True,

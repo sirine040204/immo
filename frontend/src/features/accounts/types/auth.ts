@@ -17,8 +17,39 @@ export interface JWTPayload {
   user_id: number;
 }
 
-// Since the API only returns a token (not a full user profile on login), 
-// we construct a partial User type from what we know or can fetch later.
+// Profile returned by /api/v1/accounts/me/
 export interface User {
-  id: number;
+  id_utilisateur: number;
+  email: string;
+  nom: string;
+  prenom: string;
+  telephone?: string;
+  is_company_admin: boolean;
+  statut: string;
+  role?: number;
+  role_nom?: string;
+  entreprise?: number;
+  entreprise_nom?: string;
+  photo?: string;
+}
+
+export interface RegisterCredentials {
+  nom: string;
+  prenom: string;
+  email: string;
+  mot_de_passe: string;
+  telephone?: string;
+  nom_entreprise: string;
+  numero_fiscal: string;
+  forme_juridique: string;
+  secteur_activite: string;
+  email_notifications: string;
+  numero_telephone: string;
+  adresse?: string;
+  photo?: string;
+}
+
+export interface RegisterResponse {
+  message: string;
+  user_id: number;
 }

@@ -49,7 +49,7 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  --background: #faf8f5; /* Light beige / blanc cassé */
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -72,7 +72,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0.3rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -81,6 +81,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* ── Brand green ── exact dark forest green from the reference button */
+  --brand-green:       #005043;
+  --brand-green-hover: #003d32;
+  --brand-green-light: #edf7f3;
+  --brand-green-text:  #005043;
 }
 
 .dark {
@@ -124,9 +130,36 @@
 
   body {
     @apply bg-background text-foreground;
+    /* Carreaux (graph-paper) background — shared by every page */
+    background-image:
+      linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-attachment: fixed;
   }
 
   html {
     @apply font-sans;
   }
 }
+
+/* Utility class kept for backwards-compatibility with layouts
+   that already reference it — it is now a no-op because the
+   grid is defined on <body> above. */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── Brand-green Tailwind-compatible utilities ── */
+.bg-brand-green          { background-color: var(--brand-green); }
+.hover\:bg-brand-green:hover { background-color: var(--brand-green); }
+.bg-brand-green-hover    { background-color: var(--brand-green-hover); }
+.hover\:bg-brand-green-hover:hover { background-color: var(--brand-green-hover); }
+.bg-brand-green-light    { background-color: var(--brand-green-light); }
+.text-brand-green        { color: var(--brand-green-text); }
+.border-brand-green      { border-color: var(--brand-green); }
+.ring-brand-green        { --tw-ring-color: var(--brand-green); }
+.focus\:ring-brand-green:focus { --tw-ring-color: var(--brand-green); }

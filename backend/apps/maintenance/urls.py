@@ -23,6 +23,8 @@ from .views import (
     SuiviEtapeInterventionDetailView,
     RapportInterventionListCreateView,
     RapportInterventionDetailView,
+    AiChatbotView,
+    MaintenanceKPIsView,
 )
 
 
@@ -150,5 +152,16 @@ urlpatterns = [
         "rapports-intervention/<int:pk>/",
         RapportInterventionDetailView.as_view(),
         name="rapport-intervention-detail",
+    ),
+    
+    path(
+        "ai-chat/",
+        AiChatbotView.as_view(),
+        name="ai-chat",
+    ),
+    path(
+        "kpis/",
+        MaintenanceKPIsView.as_view(),
+        name="maintenance-kpis",
     ),
 ]

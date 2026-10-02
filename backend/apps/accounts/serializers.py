@@ -15,7 +15,11 @@ from .models import (
     EmployeeActivation,
     Permission,
     RolePermission,
+    PasswordResetToken,
+    PermissionRequest,
 )
+import random
+from ..accounts.utils import send_company_status_email
 #CompanyAdminRegistrationSerializer
 class CompanyAdminRegistrationSerializer(serializers.Serializer):
     # User information
@@ -24,6 +28,7 @@ class CompanyAdminRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     telephone = serializers.CharField(max_length=30, required=False, allow_blank=True)
     mot_de_passe = serializers.CharField(write_only=True, min_length=8)
+    photo = serializers.CharField(required=False, allow_blank=True)
 
     # Company information
     nom_entreprise = serializers.CharField(max_length=255)
@@ -34,10 +39,7 @@ class CompanyAdminRegistrationSerializer(serializers.Serializer):
     numero_telephone = serializers.CharField(max_length=30)
 
     description = serializers.CharField(required=False, allow_blank=True)
-    documents_justificatifs = serializers.CharField(
-        required=False,
-        allow_blank=True,
-    )
+    documents_justificatifs = serializers.CharField()
     logo = serializers.CharField(required=False, allow_blank=True)
     adresse = serializers.CharField(required=False, allow_blank=True)
     site_web = serializers.URLField(required=False, allow_blank=True)
@@ -71,10 +73,7 @@ class CompanyAdminRegistrationSerializer(serializers.Serializer):
             email_notifications=validated_data["email_notifications"],
             numero_telephone=validated_data["numero_telephone"],
             description=validated_data.get("description", ""),
-            documents_justificatifs=validated_data.get(
-                "documents_justificatifs",
-                "",
-            ),
+            documents_justificatifs=validated_data["documents_justificatifs"],
             logo=validated_data.get("logo", ""),
             adresse=validated_data.get("adresse", ""),
             site_web=validated_data.get("site_web", ""),
@@ -95,6 +94,7 @@ class CompanyAdminRegistrationSerializer(serializers.Serializer):
             nom=validated_data["nom"],
             prenom=validated_data["prenom"],
             telephone=validated_data.get("telephone", ""),
+            photo=validated_data.get("photo", ""),
             entreprise=company,
             is_company_admin=True,
             is_approved=False,
@@ -146,6 +146,46 @@ class LoginSerializer(serializers.Serializer):
 
         return attrs
 
+import requests
+
+#GoogleLoginSerializer
+class GoogleLoginSerializer(serializers.Serializer):
+    token = serializers.CharField()
+
+    def validate(self, attrs):
+        token = attrs.get("token")
+        
+        # Verify access token by fetching user info
+        response = requests.get(f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={token}")
+        if response.status_code != 200:
+            raise serializers.ValidationError("Token Google invalide ou expiré.")
+        
+        user_info = response.json()
+        email = user_info.get('email')
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Aucun compte associé à cet email. Veuillez vous inscrire.")
+
+        if not user.is_approved:
+            raise serializers.ValidationError("Votre compte n'a pas encore été approuvé.")
+
+        if not user.is_active:
+            raise serializers.ValidationError("Votre compte est désactivé.")
+
+        if user.entreprise and user.entreprise.statut != Entreprise.Statut.ACTIVE:
+            raise serializers.ValidationError("Votre entreprise est désactivée.")
+
+        refresh = RefreshToken.for_user(user)
+
+        attrs["user"] = user
+        attrs["refresh"] = str(refresh)
+        attrs["access"] = str(refresh.access_token)
+
+        return attrs
+
+
 #CompanyApprovalSerializer
 class CompanyApprovalSerializer(serializers.Serializer):
 
@@ -166,6 +206,9 @@ class CompanyApprovalSerializer(serializers.Serializer):
                 statut=User.Statut.ACTIVE,
                 is_approved=True,
             )
+            
+            for admin_user in company_admins:
+                send_company_status_email(admin_user, company, "APPROUVE")
 
         return company
 # CompanyRejectionSerializer
@@ -189,6 +232,9 @@ class CompanyRejectionSerializer(serializers.Serializer):
                 is_approved=False,
             )
 
+            for admin_user in company_admins:
+                send_company_status_email(admin_user, company, "REJETE")
+
         return company
 # CompanySuspensionSerializer
 class CompanySuspensionSerializer(serializers.Serializer):
@@ -200,6 +246,10 @@ class CompanySuspensionSerializer(serializers.Serializer):
 
             company.statut = Entreprise.Statut.DESACTIVE
             company.save(update_fields=["statut"])
+            
+            company_admins = User.objects.filter(entreprise=company, is_company_admin=True)
+            for admin_user in company_admins:
+                send_company_status_email(admin_user, company, "SUSPENDU")
 
         return company
 # CompanyReactivationSerializer
@@ -212,8 +262,46 @@ class CompanyReactivationSerializer(serializers.Serializer):
 
             company.statut = Entreprise.Statut.ACTIVE
             company.save(update_fields=["statut"])
+            
+            company_admins = User.objects.filter(entreprise=company, is_company_admin=True)
+            for admin_user in company_admins:
+                send_company_status_email(admin_user, company, "REACTIVE")
 
         return company
+# UserProfileSerializer
+class UserProfileSerializer(serializers.ModelSerializer):
+    role_nom = serializers.CharField(source='role.nom', read_only=True)
+    entreprise_nom = serializers.CharField(source='entreprise.nom_entreprise', read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id_utilisateur',
+            'email',
+            'nom',
+            'prenom',
+            'telephone',
+            'is_company_admin',
+            'statut',
+            'role',
+            'role_nom',
+            'entreprise',
+            'entreprise_nom',
+            'photo'
+        ]
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'nom',
+            'prenom',
+            'telephone',
+            'email',
+            'photo',
+        ]
+
+
 #EmployeeInvitationSerializer
 class EmployeeInvitationSerializer(serializers.Serializer):
 
@@ -269,7 +357,7 @@ class EmployeeInvitationSerializer(serializers.Serializer):
         )
 
         activation_link = (
-            "http://127.0.0.1:8000/api/v1/accounts/employees/activate/"
+            "http://localhost:3000/activate-employee"
             f"?token={activation.token}"
         )
 
@@ -396,6 +484,11 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         source="role.nom",
         read_only=True,
     )
+    invitation_expires_at = serializers.DateTimeField(
+        source="activation.expires_at",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = User
@@ -410,6 +503,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             "statut",
             "date_creation",
             "derniere_connexion",
+            "invitation_expires_at",
         ]
         read_only_fields = fields
 
@@ -478,3 +572,131 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "statut",
         ]
     
+# PasswordResetRequestSerializer
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    method = serializers.ChoiceField(choices=["OTP", "LINK"], default="OTP")
+
+    def save(self):
+        email = self.validated_data["email"]
+        method = self.validated_data["method"]
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return None
+
+        otp = str(random.randint(100000, 999999))
+        token = uuid.uuid4()
+
+        PasswordResetToken.objects.create(
+            user=user,
+            otp_code=otp,
+            token=token,
+            expires_at=timezone.now() + timedelta(minutes=15)
+        )
+
+        magic_link = f"http://localhost:3000/reset-password?token={token}"
+
+        if method == "OTP":
+            message = (
+                f"Bonjour {user.prenom},\n\n"
+                f"Vous avez demandé la réinitialisation de votre mot de passe.\n\n"
+                f"Voici votre code de vérification à 6 chiffres : {otp}\n\n"
+                "Ce code est valable pendant 15 minutes."
+            )
+        else:
+            message = (
+                f"Bonjour {user.prenom},\n\n"
+                f"Vous avez demandé la réinitialisation de votre mot de passe.\n\n"
+                f"Cliquez sur ce lien pour choisir un nouveau mot de passe directement :\n"
+                f"{magic_link}\n\n"
+                "Ce lien est valable pendant 15 minutes."
+            )
+
+        send_mail(
+            subject="Réinitialisation de votre mot de passe",
+            message=message,
+            from_email=None,
+            recipient_list=[email],
+        )
+        return True
+
+# PasswordResetVerifyOTPSerializer
+class PasswordResetVerifyOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp_code = serializers.CharField(max_length=6)
+
+    def validate(self, attrs):
+        email = attrs["email"]
+        otp_code = attrs["otp_code"]
+
+        try:
+            reset_token = PasswordResetToken.objects.select_related("user").get(
+                user__email=email,
+                otp_code=otp_code,
+                used=False,
+                expires_at__gt=timezone.now()
+            )
+        except PasswordResetToken.DoesNotExist:
+            raise serializers.ValidationError("Code OTP invalide ou expiré.")
+
+        attrs["reset_token"] = reset_token
+        return attrs
+
+# PasswordResetConfirmSerializer
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.UUIDField()
+    mot_de_passe = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, attrs):
+        token = attrs["token"]
+        try:
+            reset_token = PasswordResetToken.objects.select_related("user").get(
+                token=token,
+                used=False,
+                expires_at__gt=timezone.now()
+            )
+        except PasswordResetToken.DoesNotExist:
+            raise serializers.ValidationError("Lien magique ou token invalide / expiré.")
+        
+        attrs["reset_token"] = reset_token
+        return attrs
+
+    def save(self, **kwargs):
+        reset_token = self.validated_data["reset_token"]
+        password = self.validated_data["mot_de_passe"]
+
+        user = reset_token.user
+        user.set_password(password)
+        user.save(update_fields=["password"])
+
+        reset_token.used = True
+        reset_token.save(update_fields=["used"])
+
+        return user
+
+class PermissionRequestSerializer(serializers.ModelSerializer):
+    user_nom = serializers.CharField(source='user.nom', read_only=True)
+    user_prenom = serializers.CharField(source='user.prenom', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    permission_code = serializers.CharField(source='permission.code', read_only=True)
+    permission_nom = serializers.CharField(source='permission.nom', read_only=True)
+
+    class Meta:
+        model = PermissionRequest
+        fields = [
+            'id', 'user', 'user_nom', 'user_prenom', 'user_email',
+            'permission', 'permission_code', 'permission_nom',
+            'statut', 'motif_rejet', 'date_demande', 'date_traitement'
+        ]
+        read_only_fields = ['id', 'user', 'statut', 'date_demande', 'date_traitement', 'traite_par', 'motif_rejet']
+
+
+class PermissionRequestProcessSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["ACCEPT", "REJECT", "REVOKE"])
+    motif_rejet = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if attrs.get('action') in ['REJECT', 'REVOKE'] and not attrs.get('motif_rejet'):
+            raise serializers.ValidationError({"motif_rejet": "Le motif est obligatoire pour cette action."})
+        return attrs

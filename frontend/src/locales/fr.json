@@ -1,0 +1,34 @@
+{
+  "topbar": {
+    "system_operational": "Système opérationnel",
+    "hide_menu": "Masquer le menu",
+    "show_menu": "Afficher le menu",
+    "language": "EN"
+  },
+  "sidebar": {
+    "structure": "STRUCTURE",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "users": "Utilisateurs",
+    "roles": "Rôles",
+    "permissions": "Permissions",
+    "demands": "Demandes",
+    "assets": "Immobilisations",
+    "families": "Familles",
+    "treatment": "TRAITEMENT",
+    "maintenance": "Entretiens",
+    "config_maintenance": "Configuration Entretiens",
+    "types_maintenance": "Types Entretiens",
+    "models_maintenance": "Modeles Entretiens",
+    "exec_maintenance": "Exécution Entretiens",
+    "documents": "Documents",
+    "types_documents": "Types Documents",
+    "management_documents": "Gestion Documents",
+    "logout": "Déconnexion",
+    "my_account": "Mon Compte"
+  },
+  "demandes_permissions": {
+    "title": "Demandes de Permissions",
+    "subtitle": "Gérez les demandes de permissions des employés de votre entreprise."
+  }
+}

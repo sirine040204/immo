@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, ReactNode } from "react";
+import { GoogleTranslate } from "@/shared/components/GoogleTranslate";
 import { AuthProvider } from "../auth/AuthContext";
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -22,6 +23,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <GoogleTranslate />
         {children}
       </AuthProvider>
     </QueryClientProvider>

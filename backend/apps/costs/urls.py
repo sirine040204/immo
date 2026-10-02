@@ -4,6 +4,8 @@ from .views import (
     CoutImmobilisationListCreateView,
     CoutImmobilisationDetailView,
     CoutImmobilisationWorkflowView,
+    CoutImmobilisationArchiveView,
+    CoutImmobilisationExportCSVView,
 )
 
 
@@ -45,5 +47,25 @@ urlpatterns = [
         CoutImmobilisationWorkflowView.as_view(),
         {"action": "reject"},
         name="cout-immobilisation-reject",
+    ),
+
+    path(
+        "<int:id_cout>/archive/",
+        CoutImmobilisationArchiveView.as_view(),
+        {"action": "archive"},
+        name="cout-immobilisation-archive",
+    ),
+
+    path(
+        "<int:id_cout>/unarchive/",
+        CoutImmobilisationArchiveView.as_view(),
+        {"action": "unarchive"},
+        name="cout-immobilisation-unarchive",
+    ),
+
+    path(
+        "export/csv/",
+        CoutImmobilisationExportCSVView.as_view(),
+        name="cout-immobilisation-export-csv",
     ),
 ]

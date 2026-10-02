@@ -133,6 +133,23 @@ class CoutImmobilisation(models.Model):
         blank=True,
     )
 
+    is_archived = models.BooleanField(
+        default=False,
+    )
+
+    date_archivage = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    archive_par = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="couts_archives",
+    )
+
     # ============================================================
     # AUDIT — CRÉATION
     # ============================================================

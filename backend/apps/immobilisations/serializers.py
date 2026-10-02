@@ -13,6 +13,7 @@ from django.utils import timezone
 #famille
 #get/patch/post famille
 class FamilleSerializer(serializers.ModelSerializer):
+    entreprise_nom = serializers.CharField(source='entreprise.nom_entreprise', read_only=True)
 
     class Meta:
         model = Famille
@@ -25,6 +26,7 @@ class FamilleSerializer(serializers.ModelSerializer):
             "taux_amortissement",
             "statut",
             "entreprise",
+            "entreprise_nom",
         ]
 
         read_only_fields = [
@@ -332,11 +334,74 @@ class OptionAttributSerializer(serializers.ModelSerializer):
 
  # immobilisation
 class ImmobilisationSerializer(serializers.ModelSerializer):
+    entreprise_nom = serializers.CharField(source='entreprise.nom_entreprise', read_only=True)
+    cree_par_nom = serializers.SerializerMethodField()
+    modifie_par_nom = serializers.SerializerMethodField()
+
+    def get_cree_par_nom(self, obj):
+        if obj.cree_par:
+            prenom = getattr(obj.cree_par, 'prenom', '')
+            nom = getattr(obj.cree_par, 'nom', '')
+            full_name = f"{prenom} {nom}".strip()
+            return full_name or getattr(obj.cree_par, 'email', '')
+        return None
+
+    def get_modifie_par_nom(self, obj):
+        if obj.modifie_par:
+            prenom = getattr(obj.modifie_par, 'prenom', '')
+            nom = getattr(obj.modifie_par, 'nom', '')
+            full_name = f"{prenom} {nom}".strip()
+            return full_name or getattr(obj.modifie_par, 'email', '')
+        return None
+    
+    has_missing_documents = serializers.BooleanField(read_only=True, default=False)
+    alerte_predictive = serializers.SerializerMethodField(read_only=True)
+
+    def get_alerte_predictive(self, obj):
+        from ..maintenance.models import Intervention
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+        
+        # Interventions in the last 30 days for this immobilisation
+        correctives_count = Intervention.objects.filter(
+            immobilisation=obj,
+            type_entretien__code__iexact='CORRECTIF',
+            date_demande__gte=thirty_days_ago
+        ).count()
+        
+        if correctives_count == 0:
+            return None
+            
+        machine_age_days = (now.date() - obj.date_acquisition).days if obj.date_acquisition else 0
+        machine_age_years = machine_age_days / 365.25
+        
+        if correctives_count >= 3:
+            return {
+                "niveau": "CRITIQUE",
+                "message": f"Attention : Cette machine a eu {correctives_count} interventions correctives ce mois-ci, risque de panne critique élevé."
+            }
+        elif correctives_count >= 2 and machine_age_years > 5:
+             return {
+                "niveau": "CRITIQUE",
+                "message": f"Attention : Machine vieillissante (>5 ans) avec {correctives_count} pannes récentes. Risque élevé de défaillance majeure."
+            }
+        elif correctives_count >= 1:
+            return {
+                "niveau": "ATTENTION",
+                "message": f"À surveiller : {correctives_count} panne(s) corrective(s) signalée(s) dans les 30 derniers jours."
+            }
+            
+        return None
+    
     class Meta:
         model = Immobilisation
         fields = [
             "id_immobilisation",
             "entreprise",
+            "entreprise_nom",
             "famille",
             "code",
             "designation",
@@ -357,11 +422,15 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
             "prix_cession",
             "motif_sortie",
             "cree_par",
+            "cree_par_nom",
             "date_creation",
             "modifie_par",
+            "modifie_par_nom",
             "date_derniere_modification",
             "date_derniere_maintenance",
             "date_prochaine_maintenance",
+            "has_missing_documents",
+            "alerte_predictive",
         ]
 
         read_only_fields = [
@@ -400,7 +469,7 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
     def validate_date_mise_en_service(self, value):
         today = timezone.localdate()
 
-        if value > today:
+        if value is not None and value > today:
             raise serializers.ValidationError(
                 "La date de mise en service ne peut pas être dans le futur."
             )
@@ -409,7 +478,7 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
     def validate_date_cession(self, value):
         today = timezone.localdate()
 
-        if value > today:
+        if value is not None and value > today:
             raise serializers.ValidationError(
                 "La date de cession ne peut pas être dans le futur."
             )
@@ -419,7 +488,7 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
     def validate_date_acquisition(self, value):
         today = timezone.localdate()
 
-        if value > today:
+        if value is not None and value > today:
             raise serializers.ValidationError(
                 "La date d'acquisition ne peut pas être dans le futur."
             )
@@ -590,6 +659,28 @@ class ImmobilisationSerializer(serializers.ModelSerializer):
                     )
                 })
 
+        # Cohérence des dates de maintenance
+        date_derniere_maintenance = attrs.get(
+            "date_derniere_maintenance",
+            instance.date_derniere_maintenance if instance else None
+        )
+        date_prochaine_maintenance = attrs.get(
+            "date_prochaine_maintenance",
+            instance.date_prochaine_maintenance if instance else None
+        )
+        
+        if (
+            date_derniere_maintenance is not None
+            and date_prochaine_maintenance is not None
+            and date_derniere_maintenance > date_prochaine_maintenance
+        ):
+            raise serializers.ValidationError({
+                "date_derniere_maintenance": (
+                    "La date de dernière maintenance ne peut pas être "
+                    "postérieure à la date de prochaine maintenance."
+                )
+            })
+
         return attrs
 
     def create(self, validated_data):
@@ -639,7 +730,7 @@ class ReformerImmobilisationSerializer(serializers.ModelSerializer):
         return value
 
     def validate_prix_cession(self, value):
-        if value < 0:
+        if value is not None and value < 0:
             raise serializers.ValidationError(
                 "Le prix de cession ne peut pas être négatif."
             )

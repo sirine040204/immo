@@ -14,7 +14,7 @@ class Famille(models.Model):
     code = models.CharField(max_length=100)
     nom = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    icone = models.CharField(max_length=500, blank=True)
+    icone = models.FileField(upload_to="familles/icones/", max_length=500, null=True, blank=True)
 
     taux_amortissement = models.DecimalField(
         max_digits=5,
@@ -403,7 +403,7 @@ class ReleveUsage(models.Model):
         blank=True,
     )
 
-    date_releve = models.DateField(
+    date_releve = models.DateTimeField(
         auto_now_add=True,
     )
 

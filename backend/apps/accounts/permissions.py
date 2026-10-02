@@ -36,21 +36,27 @@ def user_has_permission(user, permission_code):
     if user.is_company_admin:
         return True
 
-    # Employé sans rôle
-    if not user.role:
-        return False
+    has_role_perm = False
+    has_extra_perm = False
 
-    # Plusieurs permissions possibles :
-    # une seule permission parmi la liste suffit.
     if isinstance(permission_code, (list, tuple, set)):
-        return user.role.role_permissions.filter(
-            permission__code__in=permission_code
+        if user.role:
+            has_role_perm = user.role.role_permissions.filter(
+                permission__code__in=permission_code
+            ).exists()
+        has_extra_perm = user.extra_permissions.filter(
+            code__in=permission_code
+        ).exists()
+    else:
+        if user.role:
+            has_role_perm = user.role.role_permissions.filter(
+                permission__code=permission_code
+            ).exists()
+        has_extra_perm = user.extra_permissions.filter(
+            code=permission_code
         ).exists()
 
-    # Une seule permission
-    return user.role.role_permissions.filter(
-        permission__code=permission_code
-    ).exists()
+    return has_role_perm or has_extra_perm
 
 
 class HasPermission(BasePermission):
@@ -65,6 +71,7 @@ class HasPermission(BasePermission):
     """
 
     required_permission = None
+    message = "Accès refusé."
 
     def has_permission(self, request, view):
 
@@ -84,7 +91,21 @@ class HasPermission(BasePermission):
         if not permission_code:
             return False
 
-        return user_has_permission(
+        has_access = user_has_permission(
             request.user,
             permission_code,
         )
+
+        if not has_access:
+            # Join list into string if it's a list for the frontend
+            missing = permission_code
+            if isinstance(permission_code, (list, tuple, set)):
+                missing = missing[0]  # Just taking the first one as representative for request
+
+            self.message = {
+                "detail": "Vous n'avez pas la permission d'effectuer cette action.",
+                "missing_permission_code": missing,
+            }
+            return False
+
+        return True

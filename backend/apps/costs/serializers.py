@@ -7,6 +7,11 @@ from ..immobilisations.models import Immobilisation
 
 
 class CoutImmobilisationSerializer(serializers.ModelSerializer):
+    cree_par_nom = serializers.SerializerMethodField()
+    modifie_par_nom = serializers.SerializerMethodField()
+    valide_par_nom = serializers.SerializerMethodField()
+    immobilisation_nom = serializers.SerializerMethodField()
+    archive_par_nom = serializers.SerializerMethodField()
 
     class Meta:
         model = CoutImmobilisation
@@ -15,6 +20,7 @@ class CoutImmobilisationSerializer(serializers.ModelSerializer):
             # Identification
             "id_cout",
             "immobilisation",
+            "immobilisation_nom",
             "type_cout",
             "libelle",
             "date_cout",
@@ -32,12 +38,21 @@ class CoutImmobilisationSerializer(serializers.ModelSerializer):
             "statut",
             "commentaire",
 
+            # Archivage
+            "is_archived",
+            "date_archivage",
+            "archive_par",
+            "archive_par_nom",
+
             # Audit
             "date_creation",
             "cree_par",
+            "cree_par_nom",
             "modifie_par",
+            "modifie_par_nom",
             "date_modification",
             "valide_par",
+            "valide_par_nom",
             "date_validation",
             "motif_rejet",
         ]
@@ -58,9 +73,35 @@ class CoutImmobilisationSerializer(serializers.ModelSerializer):
             # Audit contrôlé par le backend
             "date_creation",
             "cree_par",
+            "cree_par_nom",
             "modifie_par",
+            "modifie_par_nom",
             "date_modification",
+            "valide_par_nom",
+
+            # Archivage contrôlé par le backend
+            "is_archived",
+            "date_archivage",
+            "archive_par",
+            "archive_par_nom",
         ]
+
+    def get_cree_par_nom(self, obj):
+        return f"{obj.cree_par.prenom} {obj.cree_par.nom}" if obj.cree_par else None
+
+    def get_modifie_par_nom(self, obj):
+        return f"{obj.modifie_par.prenom} {obj.modifie_par.nom}" if obj.modifie_par else None
+
+    def get_valide_par_nom(self, obj):
+        return f"{obj.valide_par.prenom} {obj.valide_par.nom}" if obj.valide_par else None
+
+    def get_immobilisation_nom(self, obj):
+        if obj.immobilisation:
+            return f"{obj.immobilisation.code} - {obj.immobilisation.designation}"
+        return None
+
+    def get_archive_par_nom(self, obj):
+        return f"{obj.archive_par.prenom} {obj.archive_par.nom}" if obj.archive_par else None
 
     # ============================================================
     # LIBELLÉ

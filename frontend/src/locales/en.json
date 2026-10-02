@@ -1,0 +1,34 @@
+{
+  "topbar": {
+    "system_operational": "System Operational",
+    "hide_menu": "Hide menu",
+    "show_menu": "Show menu",
+    "language": "FR"
+  },
+  "sidebar": {
+    "structure": "STRUCTURE",
+    "profile": "Profile",
+    "settings": "Settings",
+    "users": "Users",
+    "roles": "Roles",
+    "permissions": "Permissions",
+    "demands": "Requests",
+    "assets": "Assets",
+    "families": "Families",
+    "treatment": "TREATMENT",
+    "maintenance": "Maintenance",
+    "config_maintenance": "Maintenance Config",
+    "types_maintenance": "Maintenance Types",
+    "models_maintenance": "Maintenance Models",
+    "exec_maintenance": "Maintenance Execution",
+    "documents": "Documents",
+    "types_documents": "Document Types",
+    "management_documents": "Document Management",
+    "logout": "Log Out",
+    "my_account": "My Account"
+  },
+  "demandes_permissions": {
+    "title": "Permission Requests",
+    "subtitle": "Manage permission requests from your company's employees."
+  }
+}

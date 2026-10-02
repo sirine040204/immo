@@ -31,7 +31,7 @@ class Entreprise(models.Model):
         default=Statut.EN_ATTENTE,
     )
 
-    logo = models.CharField(max_length=500, blank=True)
+    logo = models.TextField(blank=True)
     adresse = models.TextField(blank=True)
     site_web = models.URLField(blank=True)
     devise = models.CharField(max_length=10, blank=True)
@@ -190,6 +190,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True,
     )
 
+    photo = models.TextField(blank=True)
+    webauthn_challenge = models.CharField(max_length=255, blank=True)
+    ai_face_descriptor = models.TextField(blank=True, null=True)
+
     role = models.ForeignKey(
         Role,
         on_delete=models.SET_NULL,
@@ -205,6 +209,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         null=True,
         blank=True,
         related_name="utilisateurs",
+    )
+
+    extra_permissions = models.ManyToManyField(
+        Permission,
+        blank=True,
+        related_name="users_with_extra_permission",
     )
 
     statut = models.CharField(
@@ -261,3 +271,56 @@ class EmployeeActivation(models.Model):
 
     def __str__(self):
         return f"Activation - {self.user.email}"
+
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_tokens",
+    )
+    token = models.UUIDField(
+        unique=True,
+        editable=False,
+    )
+    otp_code = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "password_reset_token"
+
+    def __str__(self):
+        return f"Reset - {self.user.email}"
+
+class Passkey(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="passkeys")
+    credential_id = models.CharField(max_length=255, unique=True)
+    public_key = models.TextField()
+    sign_count = models.IntegerField(default=0)
+    name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "passkeys"
+
+class PermissionRequest(models.Model):
+    class Statut(models.TextChoices):
+        PENDING = "PENDING", "En attente"
+        ACCEPTED = "ACCEPTED", "Acceptée"
+        REJECTED = "REJECTED", "Rejetée"
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="permission_requests")
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, related_name="requests")
+    statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.PENDING)
+    motif_rejet = models.TextField(blank=True)
+    date_demande = models.DateTimeField(default=timezone.now)
+    date_traitement = models.DateTimeField(null=True, blank=True)
+    traite_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="processed_requests")
+
+    class Meta:
+        db_table = "permission_request"
+
+    def __str__(self):
+        return f"{self.user.email} - {self.permission.code} - {self.statut}"

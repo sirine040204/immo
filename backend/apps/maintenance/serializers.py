@@ -553,6 +553,7 @@ class EtapeEntretienSerializer(serializers.ModelSerializer):
         queryset = EtapeEntretien.objects.filter(
             modele_entretien=modele_entretien,
             ordre=ordre,
+            statut=EtapeEntretien.Statut.ACTIF
         )
 
         if self.instance is not None:
@@ -568,6 +569,8 @@ class EtapeEntretienSerializer(serializers.ModelSerializer):
 
 #serializer Intervention
 class InterventionSerializer(serializers.ModelSerializer):
+    demande_par_nom = serializers.SerializerMethodField(read_only=True)
+    intervention_nom = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Intervention
@@ -578,6 +581,8 @@ class InterventionSerializer(serializers.ModelSerializer):
             "modele_entretien",
             "type_entretien",
             "demande_par",
+            "demande_par_nom",
+            "intervention_nom",
             "date_demande",
             "date_prevue",
             "date_debut",
@@ -591,11 +596,28 @@ class InterventionSerializer(serializers.ModelSerializer):
             "id",
             "entreprise",
             "demande_par",
+            "demande_par_nom",
+            "intervention_nom",
             "date_demande",
             "date_debut",
             "date_fin",
             "statut",
         ]
+
+    def get_demande_par_nom(self, obj):
+        if obj.demande_par:
+            return f"{obj.demande_par.prenom} {obj.demande_par.nom}"
+        return None
+
+    def get_intervention_nom(self, obj):
+        is_correctif = obj.type_entretien and obj.type_entretien.code.upper() == "CORRECTIF"
+        if is_correctif:
+            return obj.motif or "Intervention Corrective"
+        if obj.modele_entretien:
+            return obj.modele_entretien.nom
+        if obj.type_entretien:
+            return obj.type_entretien.nom
+        return f"Intervention #{obj.id}"
 
     def validate(self, attrs):
         """
@@ -918,6 +940,8 @@ class InterventionStatutSerializer(serializers.Serializer):
 
 #Suivi Etape Intervention
 class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
+    validee_par_nom = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = SuiviEtapeIntervention
         fields = [
@@ -932,6 +956,7 @@ class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
             "commentaire",
             "date_validation",
             "validee_par",
+            "validee_par_nom",
         ]
 
         read_only_fields = [
@@ -939,7 +964,13 @@ class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
             "etape_entretien",
             "date_validation",
             "validee_par",
+            "validee_par_nom",
         ]
+
+    def get_validee_par_nom(self, obj):
+        if obj.validee_par:
+            return f"{obj.validee_par.prenom} {obj.validee_par.nom}"
+        return None
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -1104,6 +1135,8 @@ class SuiviEtapeInterventionSerializer(serializers.ModelSerializer):
 
 #Rapport Intervention
 class RapportInterventionSerializer(serializers.ModelSerializer):
+    entreprise_nom = serializers.CharField(source='intervention.entreprise.nom_entreprise', read_only=True)
+    redige_par_nom = serializers.SerializerMethodField()
 
     class Meta:
         model = RapportIntervention
@@ -1115,13 +1148,23 @@ class RapportInterventionSerializer(serializers.ModelSerializer):
             "recommandations",
             "date_rapport",
             "redige_par",
+            "redige_par_nom",
+            "entreprise_nom",
         ]
 
         read_only_fields = [
             "id",
             "date_rapport",
             "redige_par",
+            "redige_par_nom",
+            "entreprise_nom",
         ]
+
+    def get_redige_par_nom(self, obj):
+        if obj.redige_par:
+            name = f"{obj.redige_par.prenom} {obj.redige_par.nom}".strip()
+            return name if name else obj.redige_par.email
+        return "Inconnu"
 
     def validate(self, attrs):
         """

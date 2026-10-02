@@ -69,6 +69,30 @@ class NotificationDetailView(APIView):
             status=status.HTTP_200_OK,
         )
 
+    def delete(self, request, pk):
+        notification = Notification.objects.filter(
+            id_notification=pk,
+            destinataire=request.user,
+            entreprise=request.user.entreprise,
+        ).first()
+
+        if notification is None:
+            return Response(
+                {
+                    "detail": "Notification introuvable."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        notification.delete()
+
+        return Response(
+            {
+                "message": "Notification supprimée avec succès."
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class NotificationReadView(APIView):
     """
@@ -172,6 +196,28 @@ class NotificationReadAllView(APIView):
             {
                 "message": "Toutes les notifications ont été marquées comme lues.",
                 "nombre_modifie": updated_count,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class NotificationDeleteAllReadView(APIView):
+    """
+    Deletes all read notifications of the authenticated user.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        deleted_count, _ = Notification.objects.filter(
+            destinataire=request.user,
+            entreprise=request.user.entreprise,
+            lu=True,
+        ).delete()
+
+        return Response(
+            {
+                "message": "Toutes les notifications lues ont été supprimées.",
+                "nombre_supprime": deleted_count,
             },
             status=status.HTTP_200_OK,
         )

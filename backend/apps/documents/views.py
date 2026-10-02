@@ -467,6 +467,7 @@ class DocumentListCreateView(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
+        print("VALIDATION ERRORS:", serializer.errors)
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,

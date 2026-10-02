@@ -196,6 +196,7 @@ class EtapeEntretien(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["modele_entretien", "ordre"],
+                condition=models.Q(statut="ACTIF"),
                 name="unique_etape_ordre_par_modele"
             ),
         ]
@@ -293,6 +294,13 @@ class Intervention(models.Model):
 
     motif = models.TextField(
         blank=True
+    )
+
+    google_event_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="ID of the event in Google Calendar"
     )
 
     # =========================
