@@ -1,7 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
 // The base URL can be defined in .env.local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+//const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'; //before nginx
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/'; //after nginx
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -45,7 +46,7 @@ apiClient.interceptors.request.use(
         return Promise.reject({
           response: {
             data: {
-              detail: e.message === "NSFW" 
+              detail: e.message === "NSFW"
                 ? "L'image a été rejetée : Contenu inapproprié détecté par l'IA."
                 : "Votre texte contient un langage inapproprié. Veuillez le modifier."
             }
@@ -93,8 +94,8 @@ apiClient.interceptors.response.use(
       if (data?.missing_permission_code) {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
-            new CustomEvent("permission:missing", { 
-              detail: { missing_permission_code: data.missing_permission_code } 
+            new CustomEvent("permission:missing", {
+              detail: { missing_permission_code: data.missing_permission_code }
             })
           );
         }

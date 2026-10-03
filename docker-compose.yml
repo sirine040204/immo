@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: internship-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: immo
+      POSTGRES_USER: immo
+      POSTGRES_PASSWORD: immo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    image: internship-backend:latest
+    container_name: internship-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: immo
+      POSTGRES_USER: immo
+      POSTGRES_PASSWORD: immo
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+  frontend:
+    build: ./frontend
+    image: internship-frontend:latest
+    container_name: internship-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: internship-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
