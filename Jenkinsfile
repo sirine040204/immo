@@ -72,11 +72,90 @@ pipeline {
                 sh 'docker images internship-frontend:jenkins'
             }
         }
+
+        stage('Validate Docker Compose') {
+            steps {
+                sh '''
+                    echo "Creating CI Compose override..."
+
+                    cat > docker-compose.ci.yml <<'EOF'
+services:
+
+  postgres:
+    ports: !reset []
+
+  backend:
+    image: internship-backend:jenkins
+    env_file: !reset []
+    environment:
+      DJANGO_SECRET_KEY: ci-test-only-secret-key
+
+  frontend:
+    image: internship-frontend:jenkins
+    ports: !reset []
+
+  nginx:
+    ports: !reset []
+EOF
+
+                    echo "Validating Compose configuration..."
+                    docker compose \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        config
+
+                    echo "Starting Compose stack..."
+                    docker compose \
+                        -p internship-ci \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        up -d
+
+                    echo "Checking containers..."
+                    docker compose \
+                        -p internship-ci \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        ps
+
+                    echo "Checking Django..."
+                    docker compose \
+                        -p internship-ci \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        exec -T backend python manage.py check
+
+                    echo "Checking PostgreSQL connection..."
+                    docker compose \
+                        -p internship-ci \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        exec -T backend python manage.py migrate --check
+
+                    echo "Checking Nginx configuration..."
+                    docker compose \
+                        -p internship-ci \
+                        -f docker-compose.yml \
+                        -f docker-compose.ci.yml \
+                        exec -T nginx nginx -t
+
+                    echo "Docker Compose validation successful!"
+                '''
+            }
+        }
     }
 
     post {
         always {
             sh '''
+                docker compose \
+                    -p internship-ci \
+                    -f docker-compose.yml \
+                    -f docker-compose.ci.yml \
+                    down 2>/dev/null || true
+
+                rm -f docker-compose.ci.yml
+
                 docker rm -f internship-ci-postgres 2>/dev/null || true
                 docker network rm internship-ci-network 2>/dev/null || true
             '''
