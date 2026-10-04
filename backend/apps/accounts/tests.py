@@ -1,3 +1,6 @@
 from django.test import TestCase
 
-# Create your tests here.
+class BasicSetupTest(TestCase):
+    def test_environment_is_ready(self):
+        """A simple test to prove the Django test runner is working in Jenkins!"""
+        self.assertTrue(True)
