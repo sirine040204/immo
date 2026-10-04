@@ -131,12 +131,12 @@ EOF
                         -f docker-compose.ci.yml \
                         exec -T backend python manage.py check
 
-                    echo "Checking PostgreSQL connection..."
+                    echo "Running Database Migrations..."
                     docker compose \
                         -p internship-ci \
                         -f docker-compose.yml \
                         -f docker-compose.ci.yml \
-                        exec -T backend python manage.py migrate --check
+                        exec -T backend python manage.py migrate
 
                     echo "Checking Nginx configuration..."
                     docker compose \
