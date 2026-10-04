@@ -45,6 +45,21 @@ pipeline {
             }
         }
 
+        stage('Lint Frontend') {
+            steps {
+                sh '''
+                    docker build \
+                        --target builder \
+                        -t internship-frontend-ci \
+                        ./frontend
+
+                    docker run --rm \
+                        internship-frontend-ci \
+                        npm run lint
+                '''
+            }
+        }
+
         stage('Build Frontend Image') {
             steps {
                 sh 'docker build -t internship-frontend:jenkins ./frontend'
