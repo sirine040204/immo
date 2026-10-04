@@ -149,6 +149,50 @@ EOF
                 '''
             }
         }
+
+        stage('Push Images to GHCR') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'ghcr-credentials',
+                        usernameVariable: 'GHCR_USERNAME',
+                        passwordVariable: 'GHCR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        echo "$GHCR_TOKEN" | docker login ghcr.io \
+                            -u "$GHCR_USERNAME" \
+                            --password-stdin
+
+                        docker tag internship-backend:jenkins \
+                            ghcr.io/sirine040204/internship-backend:latest
+
+                        docker tag internship-backend:jenkins \
+                            ghcr.io/sirine040204/internship-backend:build-${BUILD_NUMBER}
+
+                        docker tag internship-frontend:jenkins \
+                            ghcr.io/sirine040204/internship-frontend:latest
+
+                        docker tag internship-frontend:jenkins \
+                            ghcr.io/sirine040204/internship-frontend:build-${BUILD_NUMBER}
+
+                        docker push \
+                            ghcr.io/sirine040204/internship-backend:latest
+
+                        docker push \
+                            ghcr.io/sirine040204/internship-backend:build-${BUILD_NUMBER}
+
+                        docker push \
+                            ghcr.io/sirine040204/internship-frontend:latest
+
+                        docker push \
+                            ghcr.io/sirine040204/internship-frontend:build-${BUILD_NUMBER}
+
+                        docker logout ghcr.io
+                    '''
+                }
+            }
+        }
     }
 
     post {
