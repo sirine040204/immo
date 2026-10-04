@@ -100,6 +100,7 @@ services:
 
   nginx:
     container_name: internship-ci-validate-nginx
+    volumes: !reset []
     ports: !reset []
 EOF
 
