@@ -33,6 +33,7 @@ pipeline {
 
                     docker run --rm \
                         --network internship-ci-network \
+                        -e DJANGO_SECRET_KEY=ci-test-only-secret-key \
                         -e POSTGRES_HOST=internship-ci-postgres \
                         -e POSTGRES_PORT=5432 \
                         -e POSTGRES_DB=immo \
@@ -40,9 +41,6 @@ pipeline {
                         -e POSTGRES_PASSWORD=immo \
                         internship-backend:jenkins \
                         python manage.py test
-
-                    docker rm -f internship-ci-postgres
-                    docker network rm internship-ci-network
                 '''
             }
         }
@@ -58,6 +56,15 @@ pipeline {
                 sh 'docker images internship-backend:jenkins'
                 sh 'docker images internship-frontend:jenkins'
             }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker rm -f internship-ci-postgres 2>/dev/null || true
+                docker network rm internship-ci-network 2>/dev/null || true
+            '''
         }
     }
 }
