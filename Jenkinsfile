@@ -89,6 +89,7 @@ services:
     container_name: internship-ci-validate-backend
     image: internship-backend:jenkins
     env_file: !reset []
+    ports: !reset []
     environment:
       DJANGO_SECRET_KEY: ci-test-only-secret-key
 
